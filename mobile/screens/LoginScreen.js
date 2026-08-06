@@ -12,7 +12,7 @@ import {
 import { login } from "../api/client";
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState("juan.perez@empresa.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState(null);

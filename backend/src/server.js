@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const path = require("path");
 
 const authRoutes = require("./routes/auth");
@@ -12,6 +13,14 @@ const auditoriaRoutes = require("./routes/auditoria");
 const indicadoresRoutes = require("./routes/indicadores");
 
 const app = express();
+
+// Cabeceras HTTP de seguridad basicas (X-Content-Type-Options,
+// X-Frame-Options, etc). crossOriginResourcePolicy se relaja a
+// "cross-origin" a proposito: el panel web y la app movil ya consumen
+// /uploads/fotos/*.jpg desde un origen distinto al backend por diseño
+// (ver web/js/marcaciones.js), el valor por defecto de helmet lo
+// bloquearia.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 // Solo se permiten peticiones desde navegador con origen en CORS_ORIGIN
 // (lista separada por comas en .env). Peticiones sin header Origin

@@ -34,6 +34,11 @@ CREATE TABLE IF NOT EXISTS empleados (
   hora_entrada_esperada   TEXT NOT NULL DEFAULT '08:00',
   hora_salida_esperada    TEXT NOT NULL DEFAULT '17:00',
   tolerancia_min          INTEGER NOT NULL DEFAULT 10,
+  -- Dias de la semana que trabaja el empleado: lista separada por comas de
+  -- numeros ISO (1=lunes ... 7=domingo). Default lunes-viernes, igual al
+  -- comportamiento previo a que este campo existiera. La usa el calculo de
+  -- ausencias en utils/indicadores.js.
+  dias_laborables         TEXT NOT NULL DEFAULT '1,2,3,4,5',
   creado_en               TEXT NOT NULL DEFAULT (datetime('now', '-5 hours'))
 );
 

@@ -74,8 +74,8 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca |
 | DELETE | `/api/bodegas/:id` | JWT (supervisor/admin) | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
 | GET | `/api/empleados?page&limit&busqueda&activo` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado; `activo=true\|false` opcional |
-| POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado |
-| PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado |
+| POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado (`diasLaborables` opcional: arreglo 1-7, 1=lunes; default lunes-viernes) |
+| PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado (incluye `diasLaborables`) |
 | DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
 | GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo&valido` | JWT (supervisor/admin) | Listado general de marcaciones, filtrable; `valido=true\|false` opcional |
 | GET | `/api/marcaciones/exportar?fecha&empleadoId&tipo` | JWT (supervisor/admin) | Mismos filtros, descarga un `.xlsx` (tope 5000 filas) |
@@ -154,6 +154,7 @@ para que quede evidencia y el supervisor pueda revisarlo.
 ## Próximos pasos (Fase 2 en adelante)
 - Panel web de supervisión en tiempo real (usa `GET /api/asistencia/en-turno`
   como punto de partida).
-- Turnos rotativos / dias laborables configurables por empleado — hoy
-  `GET /api/indicadores` asume lunes-viernes para calcular ausencias
-  (ver comentario en `src/utils/indicadores.js`).
+- Turnos rotativos que cambian de horario/dias semana a semana. Hoy
+  `empleados.dias_laborables` cubre "libra martes y jueves" (fijo toda la
+  semana), pero no un turno que rota cada 2 semanas — ver limitación
+  documentada en `src/utils/indicadores.js`.

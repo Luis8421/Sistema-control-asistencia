@@ -17,4 +17,10 @@ if (!columnasRegistros.some((c) => c.name === "foto_url")) {
   console.log("Columna foto_url agregada a registros_asistencia.");
 }
 
+const columnasEmpleados = db.prepare("PRAGMA table_info(empleados)").all();
+if (!columnasEmpleados.some((c) => c.name === "dias_laborables")) {
+  db.exec("ALTER TABLE empleados ADD COLUMN dias_laborables TEXT NOT NULL DEFAULT '1,2,3,4,5'");
+  console.log("Columna dias_laborables agregada a empleados (default lunes-viernes).");
+}
+
 console.log("Migracion aplicada correctamente. Tablas creadas/verificadas en:", db.name);

@@ -78,6 +78,17 @@ async function cargarEmpleados() {
   }
 }
 
+function leerDiasLaborables() {
+  return [1, 2, 3, 4, 5, 6, 7].filter((d) => document.getElementById(`dia${d}`).checked);
+}
+
+function pintarDiasLaborables(diasCsv) {
+  const dias = new Set((diasCsv || "1,2,3,4,5").split(",").map(Number));
+  for (let d = 1; d <= 7; d++) {
+    document.getElementById(`dia${d}`).checked = dias.has(d);
+  }
+}
+
 function limpiarFormulario() {
   document.getElementById("formEmpleado").reset();
   document.getElementById("empleadoId").value = "";
@@ -108,6 +119,7 @@ function abrirModalEditar(id, listaActual) {
   document.getElementById("email").value = emp.email;
   document.getElementById("cargo").value = emp.cargo || "";
   document.getElementById("bodegaId").value = emp.bodega_id;
+  pintarDiasLaborables(emp.dias_laborables);
   document.getElementById("activo").checked = !!emp.activo;
   document.getElementById("grupoActivo").classList.remove("d-none");
   document.getElementById("labelPassword").textContent = "Nueva contrasena";
@@ -137,11 +149,19 @@ document.getElementById("formEmpleado").addEventListener("submit", async (e) => 
   const id = document.getElementById("empleadoId").value;
   const password = document.getElementById("password").value;
 
+  const diasLaborables = leerDiasLaborables();
+  if (diasLaborables.length === 0) {
+    errorBox.textContent = "Selecciona al menos un dia laborable.";
+    errorBox.classList.remove("d-none");
+    return;
+  }
+
   const payload = {
     nombreCompleto: document.getElementById("nombreCompleto").value.trim(),
     email: document.getElementById("email").value.trim(),
     cargo: document.getElementById("cargo").value.trim() || null,
     bodegaId: document.getElementById("bodegaId").value,
+    diasLaborables,
   };
 
   if (!id) {

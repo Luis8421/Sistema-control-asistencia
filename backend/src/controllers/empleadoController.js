@@ -7,8 +7,26 @@ const { registrarAuditoria } = require("../utils/auditoria");
 // Nunca se selecciona password_hash hacia el panel de administracion.
 const CAMPOS_PUBLICOS = `
   id, nombre_completo, codigo_empleado, cargo, email, rol, activo, bodega_id,
-  hora_entrada_esperada, hora_salida_esperada, tolerancia_min, creado_en
+  hora_entrada_esperada, hora_salida_esperada, tolerancia_min, dias_laborables, creado_en
 `;
+
+/**
+ * Valida y normaliza diasLaborables ([1,2,3,4,5], 1=lunes...7=domingo) a
+ * la representacion CSV que se guarda en la columna. Devuelve undefined
+ * si no vino en el body (no se debe tocar el valor existente), o lanza
+ * si vino pero es invalido.
+ */
+function normalizarDiasLaborables(valor) {
+  if (valor === undefined) return undefined;
+  if (!Array.isArray(valor) || valor.length === 0) {
+    throw new Error("diasLaborables debe ser un arreglo no vacio de numeros del 1 (lunes) al 7 (domingo)");
+  }
+  const dias = [...new Set(valor.map(Number))].sort((a, b) => a - b);
+  if (dias.some((d) => !Number.isInteger(d) || d < 1 || d > 7)) {
+    throw new Error("diasLaborables solo admite numeros enteros del 1 (lunes) al 7 (domingo)");
+  }
+  return dias.join(",");
+}
 
 /**
  * GET /api/empleados?page&limit&busqueda&activo
@@ -50,8 +68,10 @@ function listar(req, res) {
 /**
  * POST /api/empleados
  * body: { nombreCompleto, codigoEmpleado, email, password, cargo, bodegaId,
- *         horaEntradaEsperada, horaSalidaEsperada, toleranciaMin }
- * El rol siempre se crea como 'empleado'.
+ *         horaEntradaEsperada, horaSalidaEsperada, toleranciaMin,
+ *         diasLaborables }
+ * El rol siempre se crea como 'empleado'. diasLaborables es opcional
+ * (default lunes-viernes): arreglo de numeros 1 (lunes) a 7 (domingo).
  */
 function crear(req, res) {
   const {
@@ -64,12 +84,20 @@ function crear(req, res) {
     horaEntradaEsperada,
     horaSalidaEsperada,
     toleranciaMin,
+    diasLaborables,
   } = req.body;
 
   if (!nombreCompleto || !codigoEmpleado || !email || !password || !bodegaId) {
     return res.status(400).json({
       error: "nombreCompleto, codigoEmpleado, email, password y bodegaId son requeridos",
     });
+  }
+
+  let diasLaborablesCsv;
+  try {
+    diasLaborablesCsv = normalizarDiasLaborables(diasLaborables);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
   }
 
   const bodega = db.prepare("SELECT id FROM bodegas WHERE id = ?").get(bodegaId);
@@ -89,8 +117,8 @@ function crear(req, res) {
 
   db.prepare(
     `INSERT INTO empleados
-      (id, nombre_completo, codigo_empleado, cargo, email, password_hash, rol, bodega_id, hora_entrada_esperada, hora_salida_esperada, tolerancia_min)
-     VALUES (?, ?, ?, ?, ?, ?, 'empleado', ?, ?, ?, ?)`
+      (id, nombre_completo, codigo_empleado, cargo, email, password_hash, rol, bodega_id, hora_entrada_esperada, hora_salida_esperada, tolerancia_min, dias_laborables)
+     VALUES (?, ?, ?, ?, ?, ?, 'empleado', ?, ?, ?, ?, COALESCE(?, '1,2,3,4,5'))`
   ).run(
     id,
     nombreCompleto,
@@ -101,7 +129,8 @@ function crear(req, res) {
     bodegaId,
     horaEntradaEsperada ?? "08:00",
     horaSalidaEsperada ?? "17:00",
-    toleranciaMin ?? 10
+    toleranciaMin ?? 10,
+    diasLaborablesCsv ?? null
   );
 
   const empleado = db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
@@ -139,7 +168,15 @@ function actualizar(req, res) {
     horaSalidaEsperada,
     toleranciaMin,
     password,
+    diasLaborables,
   } = req.body;
+
+  let diasLaborablesCsv;
+  try {
+    diasLaborablesCsv = normalizarDiasLaborables(diasLaborables);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   if (bodegaId) {
     const bodega = db.prepare("SELECT id FROM bodegas WHERE id = ?").get(bodegaId);
@@ -162,7 +199,8 @@ function actualizar(req, res) {
   db.prepare(
     `UPDATE empleados SET
       nombre_completo = ?, cargo = ?, email = ?, bodega_id = ?, activo = ?,
-      hora_entrada_esperada = ?, hora_salida_esperada = ?, tolerancia_min = ?, password_hash = ?
+      hora_entrada_esperada = ?, hora_salida_esperada = ?, tolerancia_min = ?,
+      dias_laborables = ?, password_hash = ?
      WHERE id = ?`
   ).run(
     nombreCompleto ?? existente.nombre_completo,
@@ -173,6 +211,7 @@ function actualizar(req, res) {
     horaEntradaEsperada ?? existente.hora_entrada_esperada,
     horaSalidaEsperada ?? existente.hora_salida_esperada,
     toleranciaMin ?? existente.tolerancia_min,
+    diasLaborablesCsv ?? existente.dias_laborables,
     passwordHash,
     id
   );

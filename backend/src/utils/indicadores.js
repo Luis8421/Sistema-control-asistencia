@@ -1,22 +1,32 @@
 /**
  * Calculo de indicadores de asistencia (puntualidad, atrasos, ausencias,
  * horas trabajadas) a partir de los registros crudos de
- * registros_asistencia + el horario esperado del empleado.
+ * registros_asistencia + el horario y dias laborables esperados del
+ * empleado (empleados.dias_laborables: "1,2,3,4,5" = lunes a viernes).
  *
  * Es una funcion pura (no toca la base de datos) para que sea facil de
  * probar: recibe los registros ya filtrados por empleado/rango y devuelve
  * el resumen. El controlador (indicadoresController.js) hace las consultas
  * SQL y resuelve la fecha de "hoy".
  *
- * Asuncion documentada: dias laborables = lunes a viernes. El esquema
- * actual no modela turnos rotativos ni dias libres por empleado (ver
- * seccion "Turnos rotativos" en el roadmap), asi que un empleado con un
- * horario distinto va a ver ausencias mal contadas hasta que eso exista.
+ * Limitacion documentada: dias_laborables es fijo por semana (no rota de
+ * una semana a otra). Cubre el caso de "libra martes y jueves" pero no un
+ * turno que cambia de horario/dias cada 2 semanas.
  */
 
 function minutosDeHoraTexto(horaTexto) {
   const [h, m] = horaTexto.split(":").map(Number);
   return h * 60 + m;
+}
+
+/** "1,2,3,4,5" -> Set{1,2,3,4,5} (1=lunes ... 7=domingo, ISO) */
+function parseDiasLaborables(diasLaborablesTexto) {
+  return new Set(diasLaborablesTexto.split(",").map(Number));
+}
+
+/** JS getUTCDay() (0=domingo...6=sabado) -> numero ISO (1=lunes...7=domingo) */
+function aDiaIso(diaSemanaJs) {
+  return diaSemanaJs === 0 ? 7 : diaSemanaJs;
 }
 
 function minutosATexto(minutos) {
@@ -42,7 +52,7 @@ function formatearFechaUTC(date) {
 /**
  * @param {object} params
  * @param {Array<{tipo: string, timestamp_servidor: string, valido: number}>} params.registros
- * @param {{hora_entrada_esperada: string, tolerancia_min: number}} params.empleado
+ * @param {{hora_entrada_esperada: string, tolerancia_min: number, dias_laborables: string}} params.empleado
  * @param {string} params.fechaInicio - "YYYY-MM-DD"
  * @param {string} params.fechaFin - "YYYY-MM-DD", fin del rango solicitado (puede ser futuro)
  * @param {string} params.fechaFinAusencias - "YYYY-MM-DD", min(fechaFin, hoy); no se cuentan ausencias en dias futuros
@@ -94,6 +104,8 @@ function calcularIndicadores({ registros, empleado, fechaInicio, fechaFin, fecha
     });
   }
 
+  const diasLaborablesSet = parseDiasLaborables(empleado.dias_laborables);
+
   let diasLaborables = 0;
   let diasAusente = 0;
   for (
@@ -101,8 +113,7 @@ function calcularIndicadores({ registros, empleado, fechaInicio, fechaFin, fecha
     formatearFechaUTC(d) <= fechaFinAusencias;
     d.setUTCDate(d.getUTCDate() + 1)
   ) {
-    const diaSemana = d.getUTCDay(); // 0 = domingo, 6 = sabado
-    if (diaSemana === 0 || diaSemana === 6) continue;
+    if (!diasLaborablesSet.has(aDiaIso(d.getUTCDay()))) continue;
 
     diasLaborables++;
     const fechaStr = formatearFechaUTC(d);

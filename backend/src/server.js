@@ -9,6 +9,7 @@ const bodegaRoutes = require("./routes/bodegas");
 const empleadoRoutes = require("./routes/empleados");
 const marcacionRoutes = require("./routes/marcaciones");
 const auditoriaRoutes = require("./routes/auditoria");
+const indicadoresRoutes = require("./routes/indicadores");
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/api/bodegas", bodegaRoutes);
 app.use("/api/empleados", empleadoRoutes);
 app.use("/api/marcaciones", marcacionRoutes);
 app.use("/api/auditoria", auditoriaRoutes);
+app.use("/api/indicadores", indicadoresRoutes);
 
 // Manejo de errores centralizado
 app.use((err, req, res, next) => {

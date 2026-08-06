@@ -22,6 +22,7 @@ function renderNavbar(activo) {
       <span class="navbar-brand mb-0 h1">Panel de Asistencia</span>
       <div class="navbar-nav me-auto flex-row gap-3">
         ${link("marcaciones.html", "Marcaciones", "marcaciones")}
+        ${link("indicadores.html", "Indicadores", "indicadores")}
         ${link("empleados.html", "Empleados", "empleados")}
         ${link("geocercas.html", "Geocercas", "geocercas")}
         ${usuario?.rol === "admin" ? link("auditoria.html", "Auditoria", "auditoria") : ""}

@@ -68,6 +68,7 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | POST | `/api/asistencia/marcar` | JWT | Registra entrada/salida y valida geocerca |
 | GET | `/api/asistencia/historial/:empleadoId` | JWT | Historial de un empleado |
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
+| GET | `/api/indicadores/:empleadoId?desde&hasta` | JWT | Puntualidad, atrasos, ausencias y horas trabajadas en un rango (default: mes en curso) |
 | GET | `/api/bodegas?incluirInactivas=` | JWT (supervisor/admin) | Lista de geocercas (activas por defecto) |
 | POST | `/api/bodegas` | JWT (supervisor/admin) | Crear geocerca |
 | PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca |
@@ -151,7 +152,7 @@ para que quede evidencia y el supervisor pueda revisarlo.
 ## Próximos pasos (Fase 2 en adelante)
 - Panel web de supervisión en tiempo real (usa `GET /api/asistencia/en-turno`
   como punto de partida).
-- Cálculo de indicadores (puntualidad, atrasos, ausencias, horas trabajadas)
-  a partir de `registros_asistencia` + `hora_entrada_esperada` /
-  `hora_salida_esperada` de cada empleado.
-- Reportes exportables (Excel/PDF).
+- Reportes exportables (Excel/PDF) a partir de `GET /api/indicadores`.
+- Turnos rotativos / dias laborables configurables por empleado — hoy
+  `GET /api/indicadores` asume lunes-viernes para calcular ausencias
+  (ver comentario en `src/utils/indicadores.js`).

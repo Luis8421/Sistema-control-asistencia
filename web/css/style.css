@@ -1,0 +1,21 @@
+body {
+  background-color: #f4f6f8;
+}
+
+.card {
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.table td,
+.table th {
+  vertical-align: middle;
+}
+
+.badge-valido {
+  background-color: #2e7d32;
+}
+
+.badge-invalido {
+  background-color: #c0392b;
+}

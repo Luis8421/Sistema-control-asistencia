@@ -1,0 +1,33 @@
+# Caddyfile - Sistema de Asistencia
+#
+# Sirve web/ como sitio estatico y hace reverse proxy de /api y /uploads
+# hacia el backend Node/Express (puerto 4000, gestionado por PM2), todo
+# bajo el mismo origen HTTPS. Uso interno de oficina, sin salir a
+# Internet: certificados autofirmados via la CA local de Caddy
+# ("tls internal"), no Let's Encrypt.
+#
+# Instrucciones completas de instalacion/servicio en backend/README.md.
+
+{
+	# No se necesita redireccion automatica http -> https en :80: evita
+	# pelear por el puerto 80 con Apache/WAMP si sigue corriendo para
+	# otros proyectos en esta misma maquina.
+	auto_https disable_redirects
+}
+
+asistencia.local, 192.168.233.138 {
+	tls internal
+
+	handle /api/* {
+		reverse_proxy localhost:4000
+	}
+
+	handle /uploads/* {
+		reverse_proxy localhost:4000
+	}
+
+	handle {
+		root * C:\wamp64\www\proyecto-asistencia\web
+		file_server
+	}
+}

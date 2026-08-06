@@ -1,0 +1,36 @@
+# Dependencias (regenerables con npm install)
+node_modules/
+
+# Secretos y configuracion local — nunca versionar
+.env
+.env.local
+.env.*.local
+
+# Base de datos local (datos reales, password hashes, PII)
+backend/dev.db
+backend/dev.db-shm
+backend/dev.db-wal
+backend/backups/
+
+# Artefactos de prueba manual / debug
+backend/.token_test
+
+# Evidencia fotografica de marcajes (dato personal, no codigo fuente)
+backend/uploads/fotos/*
+!backend/uploads/fotos/.gitkeep
+
+# Datos de importacion (pueden contener PII de empleados reales)
+backend/data/*.csv
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Expo / React Native
+mobile/.expo/
+mobile/dist/

@@ -1,0 +1,200 @@
+renderNavbar("empleados");
+
+const estado = { page: 1, totalPaginas: 1, busqueda: "" };
+let bodegasCache = [];
+
+const modalEl = document.getElementById("modalEmpleado");
+const modal = new bootstrap.Modal(modalEl);
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
+async function cargarBodegasEnSelect() {
+  const select = document.getElementById("bodegaId");
+  const resp = await apiRequest("/bodegas");
+  bodegasCache = resp;
+  select.innerHTML = resp.map((b) => `<option value="${b.id}">${escapeHtml(b.nombre)}</option>`).join("");
+}
+
+function nombreBodega(id) {
+  const b = bodegasCache.find((x) => x.id === id);
+  return b ? b.nombre : "-";
+}
+
+function construirQuery() {
+  const params = new URLSearchParams();
+  params.set("page", estado.page);
+  params.set("limit", 20);
+  if (estado.busqueda) params.set("busqueda", estado.busqueda);
+  return params.toString();
+}
+
+async function cargarEmpleados() {
+  const tbody = document.getElementById("tablaEmpleados");
+  tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Cargando...</td></tr>`;
+
+  try {
+    const resp = await apiRequest(`/empleados?${construirQuery()}`);
+    estado.totalPaginas = resp.totalPaginas;
+
+    if (resp.data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Sin resultados</td></tr>`;
+    } else {
+      tbody.innerHTML = resp.data
+        .map(
+          (emp) => `
+        <tr>
+          <td>${escapeHtml(emp.codigo_empleado)}</td>
+          <td>${escapeHtml(emp.nombre_completo)}</td>
+          <td>${escapeHtml(emp.email)}</td>
+          <td>${escapeHtml(emp.cargo || "-")}</td>
+          <td>${escapeHtml(nombreBodega(emp.bodega_id))}</td>
+          <td>${emp.activo ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
+          <td class="text-end">
+            <button class="btn btn-outline-primary btn-sm btn-editar" data-id="${emp.id}">Editar</button>
+            <button class="btn btn-outline-danger btn-sm btn-eliminar" data-id="${emp.id}" data-nombre="${escapeHtml(emp.nombre_completo)}">Desactivar</button>
+          </td>
+        </tr>`
+        )
+        .join("");
+    }
+
+    document.getElementById("resumenPaginacion").textContent =
+      `Pagina ${resp.page} de ${resp.totalPaginas} (${resp.total} empleados)`;
+    document.getElementById("btnAnterior").disabled = resp.page <= 1;
+    document.getElementById("btnSiguiente").disabled = resp.page >= resp.totalPaginas;
+
+    document.querySelectorAll(".btn-editar").forEach((btn) =>
+      btn.addEventListener("click", () => abrirModalEditar(btn.dataset.id, resp.data))
+    );
+    document.querySelectorAll(".btn-eliminar").forEach((btn) =>
+      btn.addEventListener("click", () => eliminarEmpleado(btn.dataset.id, btn.dataset.nombre))
+    );
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
+  }
+}
+
+function limpiarFormulario() {
+  document.getElementById("formEmpleado").reset();
+  document.getElementById("empleadoId").value = "";
+  document.getElementById("codigoEmpleado").disabled = false;
+  document.getElementById("grupoActivo").classList.add("d-none");
+  document.getElementById("labelPassword").textContent = "Contrasena";
+  document.getElementById("ayudaPassword").textContent = "";
+  document.getElementById("password").required = true;
+  document.getElementById("errorEmpleado").classList.add("d-none");
+}
+
+function abrirModalNuevo() {
+  limpiarFormulario();
+  document.getElementById("tituloModalEmpleado").textContent = "Nuevo empleado";
+  modal.show();
+}
+
+function abrirModalEditar(id, listaActual) {
+  limpiarFormulario();
+  const emp = listaActual.find((e) => e.id === id);
+  if (!emp) return;
+
+  document.getElementById("tituloModalEmpleado").textContent = "Editar empleado";
+  document.getElementById("empleadoId").value = emp.id;
+  document.getElementById("nombreCompleto").value = emp.nombre_completo;
+  document.getElementById("codigoEmpleado").value = emp.codigo_empleado;
+  document.getElementById("codigoEmpleado").disabled = true;
+  document.getElementById("email").value = emp.email;
+  document.getElementById("cargo").value = emp.cargo || "";
+  document.getElementById("bodegaId").value = emp.bodega_id;
+  document.getElementById("activo").checked = !!emp.activo;
+  document.getElementById("grupoActivo").classList.remove("d-none");
+  document.getElementById("labelPassword").textContent = "Nueva contrasena";
+  document.getElementById("ayudaPassword").textContent = "Dejar en blanco para no cambiarla.";
+  document.getElementById("password").required = false;
+
+  modal.show();
+}
+
+async function eliminarEmpleado(id, nombre) {
+  if (!confirm(`Desactivar a ${nombre}? Podra reactivarse editandolo despues.`)) return;
+  try {
+    await apiRequest(`/empleados/${id}`, { method: "DELETE" });
+    cargarEmpleados();
+  } catch (err) {
+    alert(err.data?.error || "No se pudo desactivar al empleado.");
+  }
+}
+
+document.getElementById("btnNuevo").addEventListener("click", abrirModalNuevo);
+
+document.getElementById("formEmpleado").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errorBox = document.getElementById("errorEmpleado");
+  errorBox.classList.add("d-none");
+
+  const id = document.getElementById("empleadoId").value;
+  const password = document.getElementById("password").value;
+
+  const payload = {
+    nombreCompleto: document.getElementById("nombreCompleto").value.trim(),
+    email: document.getElementById("email").value.trim(),
+    cargo: document.getElementById("cargo").value.trim() || null,
+    bodegaId: document.getElementById("bodegaId").value,
+  };
+
+  if (!id) {
+    payload.codigoEmpleado = document.getElementById("codigoEmpleado").value.trim();
+    payload.password = password;
+  } else {
+    payload.activo = document.getElementById("activo").checked;
+    if (password) payload.password = password;
+  }
+
+  try {
+    if (id) {
+      await apiRequest(`/empleados/${id}`, { method: "PUT", body: payload });
+    } else {
+      await apiRequest("/empleados", { method: "POST", body: payload });
+    }
+    modal.hide();
+    cargarEmpleados();
+  } catch (err) {
+    errorBox.textContent = err.data?.error || "No se pudo guardar el empleado.";
+    errorBox.classList.remove("d-none");
+  }
+});
+
+document.getElementById("formBusqueda").addEventListener("submit", (e) => {
+  e.preventDefault();
+  estado.busqueda = document.getElementById("busqueda").value.trim();
+  estado.page = 1;
+  cargarEmpleados();
+});
+
+document.getElementById("btnLimpiarBusqueda").addEventListener("click", () => {
+  document.getElementById("busqueda").value = "";
+  estado.busqueda = "";
+  estado.page = 1;
+  cargarEmpleados();
+});
+
+document.getElementById("btnAnterior").addEventListener("click", () => {
+  if (estado.page > 1) {
+    estado.page -= 1;
+    cargarEmpleados();
+  }
+});
+
+document.getElementById("btnSiguiente").addEventListener("click", () => {
+  if (estado.page < estado.totalPaginas) {
+    estado.page += 1;
+    cargarEmpleados();
+  }
+});
+
+(async function init() {
+  await cargarBodegasEnSelect();
+  cargarEmpleados();
+})();

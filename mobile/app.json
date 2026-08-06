@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Asistencia Bodega",
+    "slug": "asistencia-bodega",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para validar que el marcaje de asistencia se realiza desde la bodega autorizada."
+      }
+    },
+    "android": {
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      "package": "com.empresa.asistenciabodega"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Necesitamos tu ubicación para validar que el marcaje de asistencia se realiza desde la bodega autorizada."
+        }
+      ]
+    ]
+  }
+}

@@ -68,26 +68,24 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | POST | `/api/asistencia/marcar` | JWT | Registra entrada/salida y valida geocerca |
 | GET | `/api/asistencia/historial/:empleadoId` | JWT | Historial de un empleado |
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
-| GET | `/api/bodegas?incluirInactivas=` | API key | Lista de geocercas (activas por defecto) |
-| POST | `/api/bodegas` | API key | Crear geocerca |
-| PUT | `/api/bodegas/:id` | API key | Editar geocerca |
-| DELETE | `/api/bodegas/:id` | API key | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
-| GET | `/api/empleados?page&limit&busqueda` | API key | Listar empleados (rol `empleado`), paginado |
-| POST | `/api/empleados` | API key | Crear empleado |
-| PUT | `/api/empleados/:id` | API key | Editar empleado |
-| DELETE | `/api/empleados/:id` | API key | Desactivar empleado (soft delete) |
-| GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo` | API key | Listado general de marcaciones, filtrable |
+| GET | `/api/bodegas?incluirInactivas=` | JWT (supervisor/admin) | Lista de geocercas (activas por defecto) |
+| POST | `/api/bodegas` | JWT (supervisor/admin) | Crear geocerca |
+| PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca |
+| DELETE | `/api/bodegas/:id` | JWT (supervisor/admin) | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
+| GET | `/api/empleados?page&limit&busqueda` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado |
+| POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado |
+| PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado |
+| DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
+| GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo` | JWT (supervisor/admin) | Listado general de marcaciones, filtrable |
 
-Los endpoints marcados **JWT** (login de empleado/supervisor y el flujo de
-marcaje/historial de la app móvil) requieren el header
-`Authorization: Bearer <token>` obtenido en `/api/auth/login`.
+Todos los endpoints requieren el header `Authorization: Bearer <token>`
+obtenido en `/api/auth/login`. Los marcados **JWT (supervisor/admin)** además
+exigen que el `rol` del token sea `supervisor` o `admin` (`403` si no).
 
-Los endpoints marcados **API key** (los que usa el panel web de
-administración) requieren el header `X-API-Key: <valor de ADMIN_API_KEY>`
-en vez de JWT — no hay login para el panel, es una clave fija compartida
-definida en `.env`. Pensado para uso interno/confianza baja (MVP); si el
-panel se expone fuera de una red confiable, esto debería reforzarse
-(HTTPS obligatorio, rotación de la key, o volver a un login real).
+El panel web de administración (`web/`) inicia sesión contra el mismo
+`/api/auth/login` que la app móvil — ya no usa una API key fija. Cualquier
+cuenta con rol `supervisor` o `admin` (creadas por `npm run seed` o desde el
+propio panel) puede entrar.
 
 ## Estructura
 
@@ -108,11 +106,9 @@ src/
 
 ## Producción
 
-- **`ADMIN_API_KEY` y `JWT_SECRET`**: deben ser valores aleatorios largos,
-  no los placeholders de `.env.example`. Genera los tuyos con
+- **`JWT_SECRET`**: debe ser un valor aleatorio largo, no el placeholder de
+  `.env.example`. Genera el tuyo con
   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
-  Si cambias `ADMIN_API_KEY`, actualiza tambien `API_KEY` en
-  `web/js/api.js` para que sigan coincidiendo.
 - **`CORS_ORIGIN`**: lista de origenes (separados por coma) desde los que
   se acepta CORS, ej. `CORS_ORIGIN=https://mipanel.com,http://localhost`.
   Cualquier otro origen recibe un error y el navegador bloquea la

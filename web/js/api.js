@@ -6,16 +6,35 @@
 // directo al backend en localhost:4000.
 const API_URL = location.protocol === "file:" ? "http://localhost:4000/api" : "/api";
 
-// Debe coincidir con ADMIN_API_KEY en backend/.env. El panel no tiene
-// login: esta clave fija es lo unico que autentica cada peticion.
-const API_KEY = "a2eee0e50ff77dea9bd79e94e547534d6b2ce6ef99aa7b1a2186d8698194eeac";
+// Sesion del panel de administracion: login real con JWT (supervisor o
+// admin), igual que usa la app movil. Se guarda bajo claves propias para
+// no chocar con la sesion de empleado que usa marcaje.html
+// (empleado_token / empleado_data).
+function getToken() {
+  return localStorage.getItem("panel_token");
+}
+
+function getUsuario() {
+  const raw = localStorage.getItem("panel_usuario");
+  return raw ? JSON.parse(raw) : null;
+}
+
+function clearSesion() {
+  localStorage.removeItem("panel_token");
+  localStorage.removeItem("panel_usuario");
+}
+
+// Sin sesion no tiene caso intentar cargar nada: al login de una vez.
+if (!getToken()) {
+  location.href = "login.html";
+}
 
 async function apiRequest(path, { method = "GET", body } = {}) {
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": API_KEY,
+      Authorization: `Bearer ${getToken()}`,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -23,6 +42,16 @@ async function apiRequest(path, { method = "GET", body } = {}) {
   if (res.status === 204) return null;
 
   const data = await res.json().catch(() => ({}));
+
+  // Token ausente/expirado (401) o sin permiso de supervisor/admin (403):
+  // no tiene sentido seguir en el panel, se manda a login. La promesa que
+  // nunca resuelve corta la cadena para que el codigo que llamo no alcance
+  // a pintar un mensaje de error justo antes de navegar afuera.
+  if (res.status === 401 || res.status === 403) {
+    clearSesion();
+    location.href = "login.html";
+    return new Promise(() => {});
+  }
 
   if (!res.ok) {
     const error = new Error(data.error || "Error de red");

@@ -1,10 +1,12 @@
 const express = require("express");
-const { requiereApiKey } = require("../middleware/apiKey");
+const { requiereAutenticacion, requiereRol } = require("../middleware/auth");
 const { listar, crear, actualizar, eliminar } = require("../controllers/bodegaController");
 
 const router = express.Router();
 
-router.use(requiereApiKey);
+// Panel de administracion: login real (JWT) restringido a supervisor/admin,
+// igual que el resto de la app. Antes usaba una API key fija compartida.
+router.use(requiereAutenticacion, requiereRol("supervisor", "admin"));
 
 router.get("/", listar);
 router.post("/", crear);

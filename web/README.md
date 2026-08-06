@@ -4,13 +4,15 @@ Panel de administración en HTML + CSS + JavaScript plano (sin build ni
 frameworks), con Bootstrap 5 vía CDN. Consume la API del `backend/`
 directamente desde el navegador (`fetch`).
 
-**No tiene login.** Cada petición al backend envía un header fijo
-`X-API-Key` (definido en `js/api.js`) que debe coincidir con
-`ADMIN_API_KEY` en `backend/.env`. Es un modelo de auth simple pensado
-para uso interno/confianza baja — cualquiera con la clave (visible en el
-JS del navegador) puede administrar empleados y geocercas.
+**Login real con JWT** (`login.html`), igual que la app móvil: el
+administrador o supervisor ingresa su email/contraseña contra
+`POST /api/auth/login`, y el token resultante se envía como
+`Authorization: Bearer <token>` en cada petición (ver `js/api.js`). Solo
+cuentas con rol `supervisor` o `admin` pueden entrar — el backend rechaza
+con `403` a cualquier otro rol, y el login del panel también lo valida del
+lado del cliente antes de guardar la sesión.
 
-## Pantallas de administración (API key, sin login)
+## Pantallas de administración (login JWT, rol supervisor/admin)
 
 - **Marcaciones** (`marcaciones.html`) — listado general de marcajes con
   filtros por fecha, empleado y tipo (entrada/salida), paginado.
@@ -19,7 +21,10 @@ JS del navegador) puede administrar empleados y geocercas.
 - **Geocercas** (`geocercas.html`) — CRUD de las bodegas/geocercas (nombre,
   dirección, latitud, longitud, radio).
 
-`index.html` solo redirige a `marcaciones.html`.
+Cualquiera de estas 3 páginas redirige automáticamente a `login.html` si no
+hay sesión guardada, o si el backend responde `401`/`403` (token vencido o
+sin permisos). `index.html` redirige a `marcaciones.html` si ya hay sesión,
+o a `login.html` si no.
 
 ## Pantalla de empleado (login propio, JWT)
 
@@ -41,13 +46,12 @@ JS del navegador) puede administrar empleados y geocercas.
 
 ## Cómo probarlo
 
-1. Levanta el backend (ver `backend/README.md`) con `ADMIN_API_KEY`
-   definido en `.env` (por defecto `miclave123` en `.env.example`).
-2. Si cambiaste `ADMIN_API_KEY` en el backend, actualiza `API_KEY` en
-   [`js/api.js`](js/api.js) para que coincida.
-3. Abre `web/index.html` en el navegador (o, como este proyecto ya vive
+1. Levanta el backend (ver `backend/README.md`) y corre `npm run seed` al
+   menos una vez (crea `admin@empresa.com` / `demo1234`, rol `admin`).
+2. Abre `web/index.html` en el navegador (o, como este proyecto ya vive
    dentro de la carpeta `www` de WAMP, vía Apache en
-   `http://localhost/proyecto-asistencia/web/`).
+   `http://localhost/proyecto-asistencia/web/`) e inicia sesión con esa
+   cuenta (o cualquier cuenta `supervisor`/`admin`).
 
 Si tu backend no corre en `http://localhost:4000`, cambia `API_URL` en
 `js/api.js` también.
@@ -56,19 +60,21 @@ Si tu backend no corre en `http://localhost:4000`, cambia `API_URL` en
 
 ```
 web/
-  index.html          # redirige a marcaciones.html
-  marcaciones.html      # listado + filtros (admin, API key)
-  empleados.html          # CRUD empleados (admin, API key)
-  geocercas.html            # CRUD geocercas (admin, API key)
-  marcaje.html                # login + marcar entrada/salida (empleado, JWT)
+  index.html          # redirige a login.html o marcaciones.html segun haya sesion
+  login.html            # login del panel (JWT, supervisor/admin)
+  marcaciones.html        # listado + filtros (admin, JWT)
+  empleados.html             # CRUD empleados (admin, JWT)
+  geocercas.html                # CRUD geocercas (admin, JWT)
+  marcaje.html                     # login + marcar entrada/salida (empleado, JWT)
   css/style.css
   js/
-    api.js                   # fetch wrapper + X-API-Key fijo (admin)
-    nav.js                    # navbar compartido (admin)
+    api.js                          # fetch wrapper + sesion JWT del panel
+    login.js                          # login del panel (standalone, sin api.js)
+    nav.js                              # navbar compartido (admin) + logout
     marcaciones.js
     empleados.js
     geocercas.js
-    marcaje.js                 # login/marcar/historial del empleado (JWT)
+    marcaje.js                             # login/marcar/historial del empleado (JWT)
 ```
 
 No incluye horarios/turnos, reportes exportables ni notificaciones — eso

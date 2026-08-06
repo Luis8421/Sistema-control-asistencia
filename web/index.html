@@ -2,10 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="refresh" content="0; url=marcaciones.html" />
   <title>Panel de Asistencia</title>
+  <script>
+    location.replace(localStorage.getItem("panel_token") ? "marcaciones.html" : "login.html");
+  </script>
 </head>
 <body>
-  <p>Abriendo el panel... si no redirige solo, <a href="marcaciones.html">haz clic aqui</a>.</p>
+  <p>Abriendo el panel... si no redirige solo, <a href="login.html">haz clic aqui</a>.</p>
 </body>
 </html>

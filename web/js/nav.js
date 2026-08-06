@@ -24,6 +24,7 @@ function renderNavbar(activo) {
         ${link("marcaciones.html", "Marcaciones", "marcaciones")}
         ${link("empleados.html", "Empleados", "empleados")}
         ${link("geocercas.html", "Geocercas", "geocercas")}
+        ${usuario?.rol === "admin" ? link("auditoria.html", "Auditoria", "auditoria") : ""}
       </div>
       <a class="nav-link text-info me-3" href="marcaje.html" target="_blank" rel="noopener">Marcar asistencia (empleados) ↗</a>
       ${infoUsuario}

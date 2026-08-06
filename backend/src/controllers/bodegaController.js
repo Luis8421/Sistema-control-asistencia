@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../db/connection");
+const { registrarAuditoria } = require("../utils/auditoria");
 
 /**
  * GET /api/bodegas?incluirInactivas=true
@@ -37,6 +38,14 @@ function crear(req, res) {
   ).run(id, nombre, direccion ?? null, latitud, longitud, radioMetros ?? 100);
 
   const bodega = db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
+
+  registrarAuditoria({
+    usuario: req.usuario,
+    accion: "crear",
+    entidad: "bodega",
+    entidadId: id,
+    detalle: { nombre, latitud, longitud, radioMetros: radioMetros ?? 100 },
+  });
 
   return res.status(201).json(bodega);
 }
@@ -81,6 +90,15 @@ function actualizar(req, res) {
   );
 
   const actualizada = db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
+
+  registrarAuditoria({
+    usuario: req.usuario,
+    accion: "actualizar",
+    entidad: "bodega",
+    entidadId: id,
+    detalle: { camposModificados: Object.keys(req.body) },
+  });
+
   return res.json(actualizada);
 }
 
@@ -112,6 +130,14 @@ function eliminar(req, res) {
   }
 
   db.prepare("DELETE FROM bodegas WHERE id = ?").run(id);
+
+  registrarAuditoria({
+    usuario: req.usuario,
+    accion: "eliminar",
+    entidad: "bodega",
+    entidadId: id,
+  });
+
   return res.status(204).send();
 }
 

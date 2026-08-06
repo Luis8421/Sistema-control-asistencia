@@ -77,6 +77,7 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado |
 | DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
 | GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo` | JWT (supervisor/admin) | Listado general de marcaciones, filtrable |
+| GET | `/api/auditoria?page&limit&entidad&usuarioId&fecha` | JWT (**solo admin**) | Historial de acciones administrativas (crear/editar/desactivar empleados y geocercas) |
 
 Todos los endpoints requieren el header `Authorization: Bearer <token>`
 obtenido en `/api/auth/login`. Los marcados **JWT (supervisor/admin)** además
@@ -96,12 +97,13 @@ src/
     connection.js    # conexión SQLite
     migrate.js        # aplica schema.sql
   utils/geo.js         # Haversine + validación de geocerca
-  middleware/auth.js    # JWT + control de roles
-  controllers/           # lógica de cada recurso
-  routes/                 # definición de rutas Express
-  seed.js                  # datos de ejemplo
-  backup.js                 # backup de dev.db (npm run backup)
-  server.js                # punto de entrada
+  utils/auditoria.js    # registra crear/actualizar/eliminar del panel
+  middleware/auth.js      # JWT + control de roles
+  controllers/               # lógica de cada recurso
+  routes/                     # definición de rutas Express
+  seed.js                      # datos de ejemplo
+  backup.js                     # backup de dev.db (npm run backup)
+  server.js                    # punto de entrada
 ```
 
 ## Producción

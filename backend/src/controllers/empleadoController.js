@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const db = require("../db/connection");
 const { parsePaginacion } = require("../utils/paginacion");
+const { registrarAuditoria } = require("../utils/auditoria");
 
 // Nunca se selecciona password_hash hacia el panel de administracion.
 const CAMPOS_PUBLICOS = `
@@ -98,6 +99,15 @@ function crear(req, res) {
   );
 
   const empleado = db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
+
+  registrarAuditoria({
+    usuario: req.usuario,
+    accion: "crear",
+    entidad: "empleado",
+    entidadId: id,
+    detalle: { nombreCompleto, codigoEmpleado, email, bodegaId },
+  });
+
   return res.status(201).json(empleado);
 }
 
@@ -162,6 +172,18 @@ function actualizar(req, res) {
   );
 
   const actualizado = db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
+
+  registrarAuditoria({
+    usuario: req.usuario,
+    accion: "actualizar",
+    entidad: "empleado",
+    entidadId: id,
+    // Solo se registran los nombres de los campos que llegaron en el body
+    // (no sus valores, y nunca la contrasena) para saber que se toco sin
+    // duplicar datos sensibles en el log de auditoria.
+    detalle: { camposModificados: Object.keys(req.body) },
+  });
+
   return res.json(actualizado);
 }
 
@@ -177,6 +199,14 @@ function eliminar(req, res) {
   }
 
   db.prepare("UPDATE empleados SET activo = 0 WHERE id = ?").run(id);
+
+  registrarAuditoria({
+    usuario: req.usuario,
+    accion: "eliminar",
+    entidad: "empleado",
+    entidadId: id,
+  });
+
   return res.status(204).send();
 }
 

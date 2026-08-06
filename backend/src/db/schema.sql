@@ -55,3 +55,22 @@ CREATE TABLE IF NOT EXISTS registros_asistencia (
 
 CREATE INDEX IF NOT EXISTS idx_registros_empleado ON registros_asistencia(empleado_id);
 CREATE INDEX IF NOT EXISTS idx_registros_timestamp ON registros_asistencia(timestamp_servidor);
+
+-- Auditoria de acciones administrativas (panel web): quien hizo que accion,
+-- sobre que entidad, y cuando. Append-only, nunca se edita ni se borra.
+-- usuario_email queda copiado aqui (no solo el id) para que el registro
+-- historico se lea igual aunque el usuario cambie de email despues.
+CREATE TABLE IF NOT EXISTS auditoria (
+  id             TEXT PRIMARY KEY,
+  usuario_id     TEXT NOT NULL REFERENCES empleados(id),
+  usuario_email  TEXT NOT NULL,
+  accion         TEXT NOT NULL, -- crear | actualizar | eliminar
+  entidad        TEXT NOT NULL, -- empleado | bodega
+  entidad_id     TEXT NOT NULL,
+  detalle        TEXT, -- JSON compacto: campos afectados, nunca contrasenas
+  creado_en      TEXT NOT NULL DEFAULT (datetime('now', '-5 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_auditoria_entidad ON auditoria(entidad, entidad_id);
+CREATE INDEX IF NOT EXISTS idx_auditoria_usuario ON auditoria(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_auditoria_creado ON auditoria(creado_en);

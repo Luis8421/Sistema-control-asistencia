@@ -38,10 +38,8 @@ async function cargarEmpleadosEnFiltro() {
   }
 }
 
-function construirQuery() {
+function construirQueryFiltros() {
   const params = new URLSearchParams();
-  params.set("page", estado.page);
-  params.set("limit", 20);
 
   const fecha = document.getElementById("filtroFecha").value;
   const empleadoId = document.getElementById("filtroEmpleado").value;
@@ -51,6 +49,13 @@ function construirQuery() {
   if (empleadoId) params.set("empleadoId", empleadoId);
   if (tipo) params.set("tipo", tipo);
 
+  return params;
+}
+
+function construirQuery() {
+  const params = construirQueryFiltros();
+  params.set("page", estado.page);
+  params.set("limit", 20);
   return params.toString();
 }
 
@@ -121,6 +126,20 @@ document.getElementById("btnSiguiente").addEventListener("click", () => {
   if (estado.page < estado.totalPaginas) {
     estado.page += 1;
     cargarMarcaciones();
+  }
+});
+
+document.getElementById("btnExportarExcel").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.textContent = "Generando...";
+  try {
+    await descargarArchivo(`/marcaciones/exportar?${construirQueryFiltros().toString()}`);
+  } catch (err) {
+    alert(err.message || "No se pudo exportar el Excel.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Exportar a Excel";
   }
 });
 

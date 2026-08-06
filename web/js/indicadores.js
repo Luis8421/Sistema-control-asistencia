@@ -44,10 +44,12 @@ async function calcularIndicadores() {
   const empleadoId = document.getElementById("filtroEmpleado").value;
   const tbody = document.getElementById("tablaDetalle");
   const resumen = document.getElementById("resumen");
+  const btnPdf = document.getElementById("btnExportarPdf");
 
   if (!empleadoId) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">Selecciona un empleado</td></tr>`;
     resumen.classList.add("d-none");
+    btnPdf.disabled = true;
     return;
   }
 
@@ -68,6 +70,7 @@ async function calcularIndicadores() {
     document.getElementById("statAusencias").textContent = data.diasAusente;
     document.getElementById("statHoras").textContent = `${data.horasTrabajadas} h`;
     resumen.classList.remove("d-none");
+    btnPdf.disabled = false;
 
     if (data.detallePorDia.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">Sin marcaciones validas en el rango</td></tr>`;
@@ -90,12 +93,36 @@ async function calcularIndicadores() {
     }
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
+    btnPdf.disabled = true;
   }
 }
 
 document.getElementById("formFiltros").addEventListener("submit", (e) => {
   e.preventDefault();
   calcularIndicadores();
+});
+
+document.getElementById("btnExportarPdf").addEventListener("click", async (e) => {
+  const empleadoId = document.getElementById("filtroEmpleado").value;
+  if (!empleadoId) return;
+
+  const params = new URLSearchParams();
+  const desde = document.getElementById("filtroDesde").value;
+  const hasta = document.getElementById("filtroHasta").value;
+  if (desde) params.set("desde", desde);
+  if (hasta) params.set("hasta", hasta);
+
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    await descargarArchivo(`/indicadores/${empleadoId}/exportar?${params.toString()}`);
+  } catch (err) {
+    alert(err.message || "No se pudo exportar el PDF.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "PDF";
+  }
 });
 
 cargarEmpleadosEnFiltro();

@@ -62,3 +62,38 @@ async function apiRequest(path, { method = "GET", body } = {}) {
 
   return data;
 }
+
+function extraerNombreArchivo(contentDisposition) {
+  const match = /filename="(.+?)"/.exec(contentDisposition || "");
+  return match ? match[1] : "descarga";
+}
+
+// Descarga un archivo (Excel/PDF) que requiere la misma sesion JWT del
+// panel. No se puede usar un <a href> plano porque no hay forma de
+// mandarle el header Authorization a una navegacion normal del navegador.
+async function descargarArchivo(path) {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    clearSesion();
+    location.href = "login.html";
+    return;
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "No se pudo generar el archivo");
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = extraerNombreArchivo(res.headers.get("Content-Disposition"));
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

@@ -1,6 +1,6 @@
 const express = require("express");
 const { requiereAutenticacion, requiereRol } = require("../middleware/auth");
-const { listarTodas } = require("../controllers/asistenciaController");
+const { listarTodas, exportarExcel } = require("../controllers/asistenciaController");
 
 const router = express.Router();
 
@@ -8,6 +8,7 @@ const router = express.Router();
 // igual que el resto de la app. Antes usaba una API key fija compartida.
 router.use(requiereAutenticacion, requiereRol("supervisor", "admin"));
 
+router.get("/exportar", exportarExcel);
 router.get("/", listarTodas);
 
 module.exports = router;

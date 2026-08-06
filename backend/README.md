@@ -78,6 +78,8 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado |
 | DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
 | GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo` | JWT (supervisor/admin) | Listado general de marcaciones, filtrable |
+| GET | `/api/marcaciones/exportar?fecha&empleadoId&tipo` | JWT (supervisor/admin) | Mismos filtros, descarga un `.xlsx` (tope 5000 filas) |
+| GET | `/api/indicadores/:empleadoId/exportar?desde&hasta` | JWT | Mismo calculo que `/api/indicadores`, descarga un `.pdf` |
 | GET | `/api/auditoria?page&limit&entidad&usuarioId&fecha` | JWT (**solo admin**) | Historial de acciones administrativas (crear/editar/desactivar empleados y geocercas) |
 
 Todos los endpoints requieren el header `Authorization: Bearer <token>`
@@ -152,7 +154,6 @@ para que quede evidencia y el supervisor pueda revisarlo.
 ## Próximos pasos (Fase 2 en adelante)
 - Panel web de supervisión en tiempo real (usa `GET /api/asistencia/en-turno`
   como punto de partida).
-- Reportes exportables (Excel/PDF) a partir de `GET /api/indicadores`.
 - Turnos rotativos / dias laborables configurables por empleado — hoy
   `GET /api/indicadores` asume lunes-viernes para calcular ausencias
   (ver comentario en `src/utils/indicadores.js`).

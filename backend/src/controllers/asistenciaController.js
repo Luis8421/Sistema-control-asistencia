@@ -3,6 +3,9 @@ const db = require("../db/connection");
 const { validarGeocerca } = require("../utils/geo");
 const { parsePaginacion } = require("../utils/paginacion");
 const { guardarFotoBase64 } = require("../utils/fotos");
+const { generarExcelMarcaciones } = require("../utils/excelExport");
+
+const MAX_FILAS_EXPORTACION = 5000;
 
 const MAX_GPS_PRECISION_M = Number(process.env.MAX_GPS_PRECISION_M || 50);
 
@@ -140,15 +143,16 @@ function enTurno(req, res) {
 }
 
 /**
- * GET /api/marcaciones?page&limit&fecha&empleadoId&tipo
- * Listado general para el panel de administracion, con filtros opcionales.
+ * Filtros compartidos por /api/marcaciones (listado paginado) y su
+ * exportacion a Excel: fecha exacta, empleado y tipo (entrada/salida).
+ * Devuelve null y ya escribe la respuesta de error si `tipo` es invalido.
  */
-function listarTodas(req, res) {
-  const { page, limit, offset } = parsePaginacion(req.query);
-  const { fecha, empleadoId, tipo } = req.query;
+function construirFiltrosMarcaciones(query, res) {
+  const { fecha, empleadoId, tipo } = query;
 
   if (tipo && !["entrada", "salida"].includes(tipo)) {
-    return res.status(400).json({ error: "tipo debe ser 'entrada' o 'salida'" });
+    res.status(400).json({ error: "tipo debe ser 'entrada' o 'salida'" });
+    return null;
   }
 
   const where = [];
@@ -167,7 +171,19 @@ function listarTodas(req, res) {
     params.push(tipo);
   }
 
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
+
+/**
+ * GET /api/marcaciones?page&limit&fecha&empleadoId&tipo
+ * Listado general para el panel de administracion, con filtros opcionales.
+ */
+function listarTodas(req, res) {
+  const { page, limit, offset } = parsePaginacion(req.query);
+
+  const filtros = construirFiltrosMarcaciones(req.query, res);
+  if (!filtros) return;
+  const { whereSql, params } = filtros;
 
   const total = db
     .prepare(`SELECT COUNT(*) AS total FROM registros_asistencia r ${whereSql}`)
@@ -188,4 +204,34 @@ function listarTodas(req, res) {
   return res.json({ data, page, limit, total, totalPaginas: Math.ceil(total / limit) || 1 });
 }
 
-module.exports = { marcar, historial, enTurno, listarTodas };
+/**
+ * GET /api/marcaciones/exportar?fecha&empleadoId&tipo
+ * Mismos filtros que el listado, sin paginar (tope MAX_FILAS_EXPORTACION
+ * para no generar un Excel gigante por error). Descarga un .xlsx.
+ */
+async function exportarExcel(req, res) {
+  const filtros = construirFiltrosMarcaciones(req.query, res);
+  if (!filtros) return;
+  const { whereSql, params } = filtros;
+
+  const registros = db
+    .prepare(
+      `SELECT r.*, e.nombre_completo, e.codigo_empleado, b.nombre AS bodega_nombre
+       FROM registros_asistencia r
+       JOIN empleados e ON e.id = r.empleado_id
+       JOIN bodegas b ON b.id = r.bodega_id
+       ${whereSql}
+       ORDER BY r.timestamp_servidor DESC
+       LIMIT ?`
+    )
+    .all(...params, MAX_FILAS_EXPORTACION);
+
+  try {
+    await generarExcelMarcaciones(registros, res);
+  } catch (err) {
+    console.error("Error generando Excel de marcaciones:", err);
+    if (!res.headersSent) res.status(500).json({ error: "No se pudo generar el archivo" });
+  }
+}
+
+module.exports = { marcar, historial, enTurno, listarTodas, exportarExcel };

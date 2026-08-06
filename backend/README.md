@@ -73,11 +73,11 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | POST | `/api/bodegas` | JWT (supervisor/admin) | Crear geocerca |
 | PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca |
 | DELETE | `/api/bodegas/:id` | JWT (supervisor/admin) | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
-| GET | `/api/empleados?page&limit&busqueda` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado |
+| GET | `/api/empleados?page&limit&busqueda&activo` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado; `activo=true\|false` opcional |
 | POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado |
 | PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado |
 | DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
-| GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo` | JWT (supervisor/admin) | Listado general de marcaciones, filtrable |
+| GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo&valido` | JWT (supervisor/admin) | Listado general de marcaciones, filtrable; `valido=true\|false` opcional |
 | GET | `/api/marcaciones/exportar?fecha&empleadoId&tipo` | JWT (supervisor/admin) | Mismos filtros, descarga un `.xlsx` (tope 5000 filas) |
 | GET | `/api/indicadores/:empleadoId/exportar?desde&hasta` | JWT | Mismo calculo que `/api/indicadores`, descarga un `.pdf` |
 | GET | `/api/auditoria?page&limit&entidad&usuarioId&fecha` | JWT (**solo admin**) | Historial de acciones administrativas (crear/editar/desactivar empleados y geocercas) |

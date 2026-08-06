@@ -21,6 +21,7 @@ function renderNavbar(activo) {
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-3 mb-4">
       <span class="navbar-brand mb-0 h1">Panel de Asistencia</span>
       <div class="navbar-nav me-auto flex-row gap-3">
+        ${link("index.html", "Inicio", "inicio")}
         ${link("marcaciones.html", "Marcaciones", "marcaciones")}
         ${link("indicadores.html", "Indicadores", "indicadores")}
         ${link("empleados.html", "Empleados", "empleados")}

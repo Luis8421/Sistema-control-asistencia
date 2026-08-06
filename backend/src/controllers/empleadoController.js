@@ -11,9 +11,11 @@ const CAMPOS_PUBLICOS = `
 `;
 
 /**
- * GET /api/empleados?page&limit&busqueda
+ * GET /api/empleados?page&limit&busqueda&activo
  * Solo lista empleados con rol 'empleado' (el CRUD de este panel no
- * gestiona cuentas de supervisor/admin).
+ * gestiona cuentas de supervisor/admin). `activo=true|false` es opcional
+ * (sin el filtro, trae activos e inactivos, igual que antes) — lo usa el
+ * dashboard para contar empleados activos con una sola consulta COUNT.
  */
 function listar(req, res) {
   const { page, limit, offset } = parsePaginacion(req.query);
@@ -24,6 +26,10 @@ function listar(req, res) {
   if (busqueda) {
     where.push("nombre_completo LIKE ?");
     params.push(`%${busqueda}%`);
+  }
+  if (req.query.activo === "true" || req.query.activo === "false") {
+    where.push("activo = ?");
+    params.push(req.query.activo === "true" ? 1 : 0);
   }
   const whereSql = `WHERE ${where.join(" AND ")}`;
 

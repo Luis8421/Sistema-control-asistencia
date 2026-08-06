@@ -14,17 +14,24 @@ lado del cliente antes de guardar la sesión.
 
 ## Pantallas de administración (login JWT, rol supervisor/admin)
 
+- **Inicio** (`index.html`) — dashboard: empleados activos, geocercas
+  activas, marcaciones válidas/inválidas del día, y quién está en turno
+  ahora mismo.
 - **Marcaciones** (`marcaciones.html`) — listado general de marcajes con
-  filtros por fecha, empleado y tipo (entrada/salida), paginado.
+  filtros por fecha, empleado y tipo (entrada/salida), paginado, con
+  exportación a Excel.
+- **Indicadores** (`indicadores.html`) — puntualidad, atrasos, ausencias y
+  horas trabajadas por empleado y rango de fechas, con exportación a PDF.
 - **Empleados** (`empleados.html`) — CRUD de empleados (crear, editar,
   desactivar) con búsqueda por nombre.
 - **Geocercas** (`geocercas.html`) — CRUD de las bodegas/geocercas (nombre,
   dirección, latitud, longitud, radio).
+- **Auditoría** (`auditoria.html`, solo rol `admin`) — quién hizo qué
+  acción administrativa y cuándo.
 
-Cualquiera de estas 3 páginas redirige automáticamente a `login.html` si no
-hay sesión guardada, o si el backend responde `401`/`403` (token vencido o
-sin permisos). `index.html` redirige a `marcaciones.html` si ya hay sesión,
-o a `login.html` si no.
+Todas estas páginas redirigen automáticamente a `login.html` si no hay
+sesión guardada, o si el backend responde `401`/`403` (token vencido o sin
+permisos).
 
 ## Pantalla de empleado (login propio, JWT)
 
@@ -60,21 +67,26 @@ Si tu backend no corre en `http://localhost:4000`, cambia `API_URL` en
 
 ```
 web/
-  index.html          # redirige a login.html o marcaciones.html segun haya sesion
+  index.html          # dashboard (admin, JWT)
   login.html            # login del panel (JWT, supervisor/admin)
-  marcaciones.html        # listado + filtros (admin, JWT)
-  empleados.html             # CRUD empleados (admin, JWT)
-  geocercas.html                # CRUD geocercas (admin, JWT)
-  marcaje.html                     # login + marcar entrada/salida (empleado, JWT)
+  marcaciones.html        # listado + filtros + exportar Excel (admin, JWT)
+  indicadores.html           # puntualidad/atrasos/ausencias + exportar PDF (admin, JWT)
+  empleados.html                 # CRUD empleados (admin, JWT)
+  geocercas.html                    # CRUD geocercas (admin, JWT)
+  auditoria.html                       # historial de acciones (solo rol admin, JWT)
+  marcaje.html                             # login + marcar entrada/salida (empleado, JWT)
   css/style.css
   js/
-    api.js                          # fetch wrapper + sesion JWT del panel
-    login.js                          # login del panel (standalone, sin api.js)
-    nav.js                              # navbar compartido (admin) + logout
+    api.js                                     # fetch wrapper + sesion JWT + descarga de archivos
+    login.js                                      # login del panel (standalone, sin api.js)
+    nav.js                                          # navbar compartido (admin) + logout
+    dashboard.js
     marcaciones.js
+    indicadores.js
     empleados.js
     geocercas.js
-    marcaje.js                             # login/marcar/historial del empleado (JWT)
+    auditoria.js
+    marcaje.js                                            # login/marcar/historial del empleado (JWT)
 ```
 
 No incluye horarios/turnos, reportes exportables ni notificaciones — eso

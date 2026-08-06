@@ -144,11 +144,14 @@ function enTurno(req, res) {
 
 /**
  * Filtros compartidos por /api/marcaciones (listado paginado) y su
- * exportacion a Excel: fecha exacta, empleado y tipo (entrada/salida).
+ * exportacion a Excel: fecha exacta, empleado, tipo (entrada/salida) y
+ * validez. `valido=true|false` es opcional (sin el filtro, trae ambos) —
+ * lo usa el dashboard para contar marcaciones validas/invalidas del dia
+ * con una sola consulta COUNT cada una.
  * Devuelve null y ya escribe la respuesta de error si `tipo` es invalido.
  */
 function construirFiltrosMarcaciones(query, res) {
-  const { fecha, empleadoId, tipo } = query;
+  const { fecha, empleadoId, tipo, valido } = query;
 
   if (tipo && !["entrada", "salida"].includes(tipo)) {
     res.status(400).json({ error: "tipo debe ser 'entrada' o 'salida'" });
@@ -169,6 +172,10 @@ function construirFiltrosMarcaciones(query, res) {
   if (tipo) {
     where.push("r.tipo = ?");
     params.push(tipo);
+  }
+  if (valido === "true" || valido === "false") {
+    where.push("r.valido = ?");
+    params.push(valido === "true" ? 1 : 0);
   }
 
   return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };

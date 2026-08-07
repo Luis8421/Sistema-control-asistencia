@@ -33,23 +33,49 @@ Todas estas páginas redirigen automáticamente a `login.html` si no hay
 sesión guardada, o si el backend responde `401`/`403` (token vencido o sin
 permisos).
 
-## Pantalla de empleado (login propio, JWT)
+## Portal de Asistencia — punto único de marcaje (login propio, JWT, PWA)
 
-- **Marcar Asistencia** (`marcaje.html`) — pensada para que cada empleado
-  la abra desde su celular o PC **sin instalar la app móvil**. A
-  diferencia de las 3 pantallas anteriores, **sí tiene login**: el
-  empleado ingresa su email/contraseña (el mismo `POST /api/auth/login`
-  que usa la app), y el JWT resultante se guarda en `localStorage` bajo
-  claves separadas (`empleado_token` / `empleado_data`) para no chocar
-  con nada del panel admin. Desde ahí puede marcar entrada/salida (usa
-  `navigator.geolocation` del navegador, igual que el GPS de la app) y
-  ver su propio historial.
+`marcaje.html` es el **portal oficial de marcaje para todo el personal**:
+un solo enlace (`https://tu-dominio/marcaje.html`), sin enlaces
+individuales por empleado. Reutiliza exactamente la misma autenticación
+(`POST /api/auth/login`) y la misma validación de geocerca del backend
+que la app móvil — no hay una segunda implementación de ninguna de las
+dos cosas, solo un chequeo local de distancia como optimización de UX
+(nunca autoritativo).
+
+El JWT se guarda en `localStorage` bajo claves separadas
+(`empleado_token` / `empleado_data`) para no chocar con la sesión del
+panel admin, y la sesión dura lo que dure el token — configurable en
+`backend/.env` con `JWT_EXPIRES_IN` (default `12h`, mismo valor para app
+móvil, portal y panel).
+
+Tras iniciar sesión, el empleado ve **únicamente lo suyo**: nombre,
+cargo, bodega asignada, fecha/hora en vivo, estado del turno ("en turno
+desde...", "turno finalizado", o "sin marcar hoy" — calculado en el
+cliente a partir de su propio historial del día, sin pedir nada nuevo al
+backend), los botones Marcar Entrada/Marcar Salida, y su historial de
+marcaciones **del día en curso** (`GET /api/asistencia/historial/:id?fecha=`).
+No hay forma de ver información de otro empleado — el backend ya lo
+impedía (`historial` rechaza con `403` si no es el propio ID), esto no
+cambió.
+
+**Preparado como PWA** (instalable en Android, iPhone y escritorio):
+`manifest.json` + `sw.js` (service worker) cachean solo el *app shell*
+estático (html/css/js/iconos) para carga rápida y "Agregar a pantalla de
+inicio" — **nunca** cachea `/api/` ni `/uploads/`: marcar asistencia
+siempre va en vivo contra el backend, cachear eso sería incorrecto dado
+que el backend es la única fuente de verdad de la geovalidación. Los
+iconos en `icons/` son placeholders generados por
+`scripts/generar-iconos-pwa.js` (ver raíz del repo) — reemplazar con el
+logo real de la empresa cuando esté disponible, misma ruta/nombre.
+
+Notas ya conocidas de la plataforma web (no cambian con esta mejora):
 - Requiere **HTTPS** para funcionar fuera de `localhost` — los
-  navegadores bloquean `navigator.geolocation` en origenes HTTP que no
-  sean `localhost`.
+  navegadores bloquean `navigator.geolocation` en orígenes HTTP que no
+  sean `localhost`. También lo exige la instalación de un service worker.
 - No puede detectar "ubicación simulada" (mock location) como sí hace la
-  app móvil — es una limitación de la API de geolocalización del
-  navegador, no algo que se pueda evitar desde el front.
+  app móvil — limitación de la API de geolocalización del navegador. El
+  backend igual valida `precisionM` y rechaza GPS poco confiable.
 
 ## Cómo probarlo
 
@@ -74,7 +100,10 @@ web/
   empleados.html                 # CRUD empleados (admin, JWT)
   geocercas.html                    # CRUD geocercas (admin, JWT)
   auditoria.html                       # historial de acciones (solo rol admin, JWT)
-  marcaje.html                             # login + marcar entrada/salida (empleado, JWT)
+  marcaje.html                             # Portal de Asistencia: login + marcar + PWA (empleado, JWT)
+  manifest.json                               # Web App Manifest (PWA)
+  sw.js                                          # service worker (cachea solo el app shell)
+  icons/                                            # iconos PWA (placeholders, ver scripts/generar-iconos-pwa.js)
   css/style.css
   js/
     api.js                                     # fetch wrapper + sesion JWT + descarga de archivos
@@ -89,5 +118,6 @@ web/
     marcaje.js                                            # login/marcar/historial del empleado (JWT)
 ```
 
-No incluye horarios/turnos, reportes exportables ni notificaciones — eso
-queda fuera del alcance de esta fase.
+No incluye horarios/turnos rotativos, notificaciones, ni modo offline
+para el marcaje en sí (la PWA da carga rápida e instalabilidad, no
+marcaje sin conexión) — eso queda fuera del alcance de esta fase.

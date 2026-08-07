@@ -128,8 +128,59 @@ async function capturarFoto() {
 function mostrarBloqueMarcaje() {
   document.getElementById("bloqueLogin").classList.add("d-none");
   document.getElementById("bloqueMarcaje").classList.remove("d-none");
-  document.getElementById("nombreEmpleado").textContent = getEmpleado().nombreCompleto;
+
+  const empleado = getEmpleado();
+  document.getElementById("nombreEmpleado").textContent = empleado.nombreCompleto;
+  document.getElementById("cargoEmpleado").textContent = empleado.cargo || "";
+  document.getElementById("bodegaEmpleado").textContent = empleado.bodega?.nombre
+    ? `Sucursal: ${empleado.bodega.nombre}`
+    : "";
+
+  iniciarReloj();
   cargarHistorial();
+}
+
+// Fecha/hora en vivo, visible mientras el empleado tiene la pantalla
+// abierta para decidir si marca entrada o salida.
+let intervaloReloj = null;
+function iniciarReloj() {
+  const el = document.getElementById("fechaHoraActual");
+  const pintar = () => {
+    el.textContent = new Date().toLocaleString("es-EC", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+  pintar();
+  clearInterval(intervaloReloj);
+  intervaloReloj = setInterval(pintar, 30000);
+}
+
+function fechaHoyLocal() {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+}
+
+// "En turno" / "fuera de turno" segun el ultimo marcaje VALIDO de hoy —
+// mismo criterio que GET /api/asistencia/en-turno (reservado a
+// supervisor/admin), pero calculado aqui con el historial que el
+// empleado ya tiene permiso de ver (el suyo propio), sin pedir nada
+// nuevo al backend.
+function pintarEstadoTurno(registrosHoy) {
+  const el = document.getElementById("estadoTurno");
+  const validosHoy = registrosHoy.filter((r) => r.valido);
+  const ultimo = validosHoy[0]; // ya vienen ordenados DESC por el backend
+
+  if (!ultimo) {
+    el.innerHTML = '<span class="badge bg-secondary">Sin marcar hoy</span>';
+  } else if (ultimo.tipo === "entrada") {
+    el.innerHTML = `<span class="badge badge-valido">En turno desde ${ultimo.timestamp_servidor.slice(11, 16)}</span>`;
+  } else {
+    el.innerHTML = `<span class="badge bg-secondary">Turno finalizado (${ultimo.timestamp_servidor.slice(11, 16)})</span>`;
+  }
 }
 
 function mostrarBloqueLogin() {
@@ -254,19 +305,23 @@ async function cargarHistorial() {
   if (!empleado) return;
 
   try {
-    const registros = await apiRequest(`/asistencia/historial/${empleado.id}`);
+    // Solo el historial de hoy: mas liviano que traer toda la carrera del
+    // empleado en cada carga de la pantalla, y es lo unico que el portal
+    // necesita mostrar (estado del turno + historial del dia).
+    const registrosHoy = await apiRequest(`/asistencia/historial/${empleado.id}?fecha=${fechaHoyLocal()}`);
 
-    if (registros.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-3">Sin marcaciones todavia</td></tr>`;
+    pintarEstadoTurno(registrosHoy);
+
+    if (registrosHoy.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-3">Sin marcaciones hoy todavia</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = registros
-      .slice(0, 20)
+    tbody.innerHTML = registrosHoy
       .map(
         (r) => `
       <tr>
-        <td>${escapeHtml(r.timestamp_servidor)}</td>
+        <td>${escapeHtml(r.timestamp_servidor.slice(11, 19))}</td>
         <td class="text-capitalize">${escapeHtml(r.tipo)}</td>
         <td>${
           r.valido
@@ -285,4 +340,16 @@ async function cargarHistorial() {
 // Si ya hay una sesion guardada de una visita anterior, saltar directo al marcaje.
 if (getToken() && getEmpleado()) {
   mostrarBloqueMarcaje();
+}
+
+// PWA: registra el service worker para que el portal sea instalable
+// ("Agregar a pantalla de inicio") y cargue rapido en visitas siguientes.
+// No cachea la API ni marca asistencia offline — eso siempre va en vivo
+// contra el backend (unica fuente de verdad de la geovalidacion).
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((err) => {
+      console.error("No se pudo registrar el service worker:", err);
+    });
+  });
 }

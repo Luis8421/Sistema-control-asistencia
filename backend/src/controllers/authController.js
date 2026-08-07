@@ -3,6 +3,13 @@ const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const db = require("../db/connection");
 
+// Duracion de la sesion (JWT), configurable via .env. Mismo valor para
+// los 3 clientes (app movil, portal de marcaje, panel admin) porque es
+// literalmente el mismo mecanismo de auth para todos — no hay una
+// duracion especial por cliente. Default identico al valor previo
+// (hardcodeado a "12h") para que no cambie nada si no se configura.
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "12h";
+
 async function login(req, res) {
   const { email, password } = req.body;
 
@@ -27,7 +34,7 @@ async function login(req, res) {
   const token = jwt.sign(
     { id: empleado.id, email: empleado.email, rol: empleado.rol },
     process.env.JWT_SECRET,
-    { expiresIn: "12h" }
+    { expiresIn: JWT_EXPIRES_IN }
   );
 
   return res.json({
@@ -36,6 +43,7 @@ async function login(req, res) {
       id: empleado.id,
       nombreCompleto: empleado.nombre_completo,
       codigoEmpleado: empleado.codigo_empleado,
+      cargo: empleado.cargo,
       rol: empleado.rol,
       bodegaId: empleado.bodega_id,
       bodega: obtenerBodegaParaValidacion(empleado.bodega_id),
@@ -104,7 +112,7 @@ async function registro(req, res) {
   const token = jwt.sign(
     { id, email, rol: "empleado" },
     process.env.JWT_SECRET,
-    { expiresIn: "12h" }
+    { expiresIn: JWT_EXPIRES_IN }
   );
 
   return res.status(201).json({
@@ -113,6 +121,7 @@ async function registro(req, res) {
       id,
       nombreCompleto,
       codigoEmpleado,
+      cargo: null,
       rol: "empleado",
       bodegaId: bodega.id,
       bodega: obtenerBodegaParaValidacion(bodega.id),

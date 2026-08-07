@@ -65,8 +65,8 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 |---|---|---|---|
 | POST | `/api/auth/login` | - | Login de empleado/supervisor, devuelve JWT |
 | POST | `/api/auth/registro` | - | Autoregistro (nombreCompleto, email, password) con rol `empleado`, devuelve JWT |
-| POST | `/api/asistencia/marcar` | JWT | Valida geocerca (Haversine) y registra entrada/salida; `422` sin guardar nada si está fuera de rango o el GPS no es confiable |
-| GET | `/api/asistencia/historial/:empleadoId` | JWT | Historial de un empleado |
+| POST | `/api/asistencia/marcar` | JWT | Valida geocerca (Haversine), secuencia del día (no permite dos entradas/salidas seguidas) y registra entrada/salida; `422` sin guardar nada si algo falla |
+| GET | `/api/asistencia/historial/:empleadoId?fecha=` | JWT | Historial de un empleado; `fecha=YYYY-MM-DD` opcional (sin ella, trae todo) |
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
 | GET | `/api/indicadores/:empleadoId?desde&hasta` | JWT | Puntualidad, atrasos, ausencias y horas trabajadas en un rango (default: mes en curso) |
 | GET | `/api/bodegas?incluirInactivas=` | JWT (supervisor/admin) | Lista de geocercas (activas por defecto) |
@@ -100,6 +100,7 @@ src/
     connection.js    # conexión SQLite
     migrate.js        # aplica schema.sql
   utils/geo.js         # Haversine + validación de geocerca
+  utils/secuenciaMarcaje.js  # entrada/salida no duplicadas en el mismo día
   utils/auditoria.js    # registra crear/actualizar/eliminar del panel
   middleware/auth.js      # JWT + control de roles
   controllers/               # lógica de cada recurso
@@ -108,7 +109,8 @@ src/
   backup.js                     # backup de dev.db (npm run backup)
   server.js                    # punto de entrada
 test/
-  geo.test.js       # suite de validarGeocerca() / calcularDistanciaMetros
+  geo.test.js                # suite de validarGeocerca() / calcularDistanciaMetros
+  secuenciaMarcaje.test.js      # suite de validarSecuenciaDelDia()
 ```
 
 ## Tests
@@ -129,6 +131,10 @@ son pruebas unitarias puras sobre la funcion.
 - **`JWT_SECRET`**: debe ser un valor aleatorio largo, no el placeholder de
   `.env.example`. Genera el tuyo con
   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+- **`JWT_EXPIRES_IN`**: duración de la sesión (formato de la librería
+  `jsonwebtoken`: `"12h"`, `"30m"`, `"7d"`...). Aplica por igual a la app
+  móvil, el portal de marcaje y el panel admin — es el mismo mecanismo de
+  auth para los tres. Default `12h` si no se define.
 - **`CORS_ORIGIN`**: lista de origenes (separados por coma) desde los que
   se acepta CORS, ej. `CORS_ORIGIN=https://mipanel.com,http://localhost`.
   Cualquier otro origen recibe un error y el navegador bloquea la
@@ -179,6 +185,22 @@ misma (no solo en el controlador): protegen la funcion contra coordenadas
 basura que, sin este chequeo, producirian una distancia `NaN` y `NaN >
 radio` evalua a `false` en JS — pasando como "valido" por accidente. Ver
 `test/geo.test.js` para la cobertura completa de estos casos.
+
+Ademas de la geocerca, tambien se rechaza (mismo `422`, sin guardar nada)
+si:
+- el empleado no tiene una bodega asignada (`sin_bodega_asignada`) —
+  estructuralmente casi imposible por la FK `empleados.bodega_id`, pero
+  se revisa explicitamente en vez de dejar que crashee.
+- **la secuencia del dia no es valida** (`src/utils/secuenciaMarcaje.js`,
+  modulo separado de `geo.js` a proposito — es una regla de negocio
+  distinta, no de geolocalizacion):
+  - `entrada_duplicada`: ya hay una entrada hoy sin una salida despues.
+  - `salida_sin_entrada`: intenta marcar salida sin haber marcado
+    entrada hoy.
+  - `salida_duplicada`: ya hay una salida hoy despues de la ultima
+    entrada.
+  - Los ciclos se reinician cada dia (`date('now', '-5 hours')`); un
+    empleado puede tener varios ciclos entrada→salida el mismo dia.
 
 Registros de marcajes inválidos anteriores a este cambio (columna `valido`
 en `registros_asistencia`) se conservan para no perder historial, pero no

@@ -1,35 +1,46 @@
-# Sistema de Control de Asistencia con Geolocalización — Fase 1 (MVP)
+# Sistema de Control de Asistencia con Geolocalización
 
-Código fuente inicial correspondiente a la Fase 1 del documento técnico:
-marcaje de entrada/salida validado por GPS contra la geocerca de la bodega
-asignada a cada empleado.
+Marcaje de entrada/salida validado por GPS contra la geocerca de la
+bodega asignada a cada empleado. La validación de geocerca (Haversine) es
+**obligatoria y bloqueante** en el backend: un marcaje fuera de rango, con
+GPS impreciso/simulado, o que rompe la secuencia del día (dos entradas
+seguidas, etc.) se rechaza y no se guarda — ver `backend/README.md` para
+el detalle completo.
 
 ## Contenido
 
-- **`backend/`** — API Node.js + Express + SQLite. Valida cada marcaje con
-  la fórmula de Haversine contra el radio autorizado de la bodega, y guarda
-  el historial completo (válido e inválido) para trazabilidad.
-  Ya probado end-to-end (login, marcaje válido, marcaje fuera de rango,
-  historial).
+- **`backend/`** — API Node.js + Express + SQLite. Geovalidación,
+  auditoría de acciones administrativas, indicadores de puntualidad,
+  reportes Excel/PDF, dashboard, y una suite de tests automatizados
+  (`npm test`) sobre la lógica de geovalidación y secuencia de marcaje.
 - **`mobile/`** — App React Native (Expo) con login y pantalla de marcaje
   que captura el GPS del dispositivo.
-- **`web/`** — Panel de administración (HTML + CSS + JS plano, Bootstrap)
-  para supervisar marcaciones y gestionar empleados y geocercas. Fase 2.
+- **`web/`** — Dos superficies distintas, ambas con login JWT real:
+  - **Panel de administración** (`index.html`, `empleados.html`,
+    `geocercas.html`, `marcaciones.html`, `indicadores.html`,
+    `auditoria.html`) para supervisor/admin.
+  - **Portal de Asistencia** (`marcaje.html`) — el punto único de marcaje
+    para todo el personal, instalable como PWA en Android/iPhone/escritorio.
+- **`scripts/`** — herramientas de desarrollo que no son parte del
+  runtime (ej. `generar-iconos-pwa.js`).
 
 ## Orden para probarlo
 
 1. Sigue `backend/README.md` para levantar la API (instala, migra, siembra
-   datos de ejemplo, corre `npm run dev`).
-2. Sigue `mobile/README.md` para correr la app en tu celular con Expo Go,
-   apuntando `API_URL` a la IP local de tu backend.
-3. Inicia sesión en la app con `juan.perez@empresa.com` / `demo1234` y
-   prueba "Marcar Entrada".
+   datos de ejemplo, corre `npm run dev`, corre `npm test`).
+2. Abre `web/marcaje.html` (Portal de Asistencia) o sigue `mobile/README.md`
+   para correr la app en tu celular con Expo Go.
+3. Inicia sesión con `juan.perez@empresa.com` / `demo1234` y prueba
+   "Marcar Entrada".
+4. Para el panel de administración, abre `web/index.html` e inicia sesión
+   con `admin@empresa.com` / `demo1234`.
 
-## Qué sigue (Fase 3 en adelante)
+## Qué sigue
 
-Según el documento técnico:
-- Cálculo de indicadores (puntualidad, atrasos, ausencias, horas
-  trabajadas) y reportes exportables.
-- Horarios/turnos configurables desde el panel.
-- Integración con nómina/ERP.
+- Turnos rotativos que cambian de horario/días semana a semana (hoy
+  `empleados.dias_laborables` cubre días fijos, no rotación).
 - Notificaciones (correo, push).
+- Modo offline para el marcaje en sí (la PWA da carga rápida e
+  instalabilidad, no marcaje sin conexión — marcar siempre requiere
+  backend en vivo, es la única fuente de verdad de la geovalidación).
+- Preparación para reconocimiento facial.

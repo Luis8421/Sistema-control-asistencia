@@ -1,0 +1,15 @@
+{
+  "name": "Portal de Asistencia",
+  "short_name": "Asistencia",
+  "description": "Marcar entrada y salida con validacion de ubicacion",
+  "start_url": "marcaje.html",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6f8",
+  "theme_color": "#2E86AB",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

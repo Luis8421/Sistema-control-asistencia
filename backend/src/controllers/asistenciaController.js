@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../db/connection");
 const { validarGeocerca } = require("../utils/geo");
+const { validarSecuenciaDelDia } = require("../utils/secuenciaMarcaje");
 const { parsePaginacion } = require("../utils/paginacion");
 const { guardarFotoBase64 } = require("../utils/fotos");
 const { generarExcelMarcaciones } = require("../utils/excelExport");
@@ -26,6 +27,14 @@ function mensajeRechazo(motivo, distanciaM, radioMetros) {
       return "No se recibieron coordenadas GPS válidas. Verifica que la ubicación esté activada e intenta de nuevo.";
     case "bodega_mal_configurada":
       return "La geocerca de tu sucursal no está configurada correctamente. Contacta al administrador.";
+    case "sin_bodega_asignada":
+      return "Tu usuario no tiene una bodega/sucursal asignada. Contacta al administrador.";
+    case "entrada_duplicada":
+      return "Ya registraste tu entrada de hoy. Marca tu salida antes de volver a marcar entrada.";
+    case "salida_sin_entrada":
+      return "Debes marcar tu entrada antes de poder marcar tu salida.";
+    case "salida_duplicada":
+      return "Ya registraste tu salida de hoy.";
     case "precision_invalida":
     default:
       return "No se recibió una precisión de GPS válida. Verifica que la ubicación esté activada e intenta de nuevo.";
@@ -66,6 +75,17 @@ function marcar(req, res) {
 
   const bodega = db.prepare("SELECT * FROM bodegas WHERE id = ?").get(empleado.bodega_id);
 
+  // Estructuralmente casi imposible (FK NOT NULL empleados.bodega_id ->
+  // bodegas.id), pero si algun dia ocurriera, mejor un 422 claro que un
+  // TypeError al leer bodega.latitud mas abajo.
+  if (!bodega) {
+    return res.status(422).json({
+      error: mensajeRechazo("sin_bodega_asignada"),
+      motivo: "sin_bodega_asignada",
+      distanciaM: null,
+    });
+  }
+
   const { valido, distanciaM, motivo } = validarGeocerca({
     lat: latitud,
     lon: longitud,
@@ -82,6 +102,26 @@ function marcar(req, res) {
       // null cuando el rechazo fue antes de poder calcular una distancia
       // real (coordenadas o bodega invalidas), no un 0 enganoso.
       distanciaM: typeof distanciaM === "number" ? Math.round(distanciaM) : null,
+    });
+  }
+
+  // Marcaciones duplicadas: no es una regla de geocerca (por eso no vive
+  // en utils/geo.js), es un chequeo de secuencia del dia en curso. Se
+  // resuelve aqui, no en la funcion pura, porque necesita consultar la DB.
+  const ultimoMarcajeHoy = db
+    .prepare(
+      `SELECT tipo FROM registros_asistencia
+       WHERE empleado_id = ? AND valido = 1 AND date(timestamp_servidor) = date('now', '-5 hours')
+       ORDER BY timestamp_servidor DESC LIMIT 1`
+    )
+    .get(empleado.id);
+
+  const secuencia = validarSecuenciaDelDia(ultimoMarcajeHoy?.tipo ?? null, tipo);
+  if (!secuencia.valido) {
+    return res.status(422).json({
+      error: mensajeRechazo(secuencia.motivo),
+      motivo: secuencia.motivo,
+      distanciaM: Math.round(distanciaM),
     });
   }
 
@@ -125,11 +165,15 @@ function marcar(req, res) {
 }
 
 /**
- * GET /api/asistencia/historial/:empleadoId
+ * GET /api/asistencia/historial/:empleadoId?fecha=YYYY-MM-DD
  * Un empleado solo puede ver su propio historial, salvo supervisor/admin.
+ * `fecha` es opcional (sin ella, trae todo el historial, igual que
+ * antes); el portal de marcaje la usa para pedir solo el dia en curso en
+ * vez de traer meses de historial en cada carga.
  */
 function historial(req, res) {
   const { empleadoId } = req.params;
+  const { fecha } = req.query;
 
   const esPropio = req.usuario.id === empleadoId;
   const esSupervisorOAdmin = ["supervisor", "admin"].includes(req.usuario.rol);
@@ -138,15 +182,22 @@ function historial(req, res) {
     return res.status(403).json({ error: "No autorizado a ver este historial" });
   }
 
+  const where = ["r.empleado_id = ?"];
+  const params = [empleadoId];
+  if (fecha) {
+    where.push("date(r.timestamp_servidor) = date(?)");
+    params.push(fecha);
+  }
+
   const registros = db
     .prepare(
       `SELECT r.*, b.nombre AS bodega_nombre
        FROM registros_asistencia r
        JOIN bodegas b ON b.id = r.bodega_id
-       WHERE r.empleado_id = ?
+       WHERE ${where.join(" AND ")}
        ORDER BY r.timestamp_servidor DESC`
     )
-    .all(empleadoId);
+    .all(...params);
 
   return res.json(registros);
 }

@@ -11,18 +11,19 @@ function escapeHtml(str) {
 
 async function cargarGeocercas() {
   const tbody = document.getElementById("tablaGeocercas");
-  tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Cargando...</td></tr>`;
 
   try {
     const bodegas = await apiRequest("/bodegas?incluirInactivas=true");
 
     if (bodegas.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Sin geocercas registradas</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Sin geocercas registradas</td></tr>`;
     } else {
       tbody.innerHTML = bodegas
         .map(
           (b) => `
         <tr>
+          <td>${b.codigo ? escapeHtml(b.codigo) : '<span class="text-muted small">Sin código</span>'}</td>
           <td>${escapeHtml(b.nombre)}</td>
           <td>${escapeHtml(b.direccion || "-")}</td>
           <td>${b.latitud}</td>
@@ -45,7 +46,7 @@ async function cargarGeocercas() {
       btn.addEventListener("click", () => eliminarGeocerca(btn.dataset.id, btn.dataset.nombre))
     );
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
   }
 }
 
@@ -69,6 +70,7 @@ function abrirModalEditar(id, listaActual) {
 
   document.getElementById("tituloModalGeocerca").textContent = "Editar geocerca";
   document.getElementById("geocercaId").value = b.id;
+  document.getElementById("codigo").value = b.codigo || "";
   document.getElementById("nombre").value = b.nombre;
   document.getElementById("direccion").value = b.direccion || "";
   document.getElementById("latitud").value = b.latitud;
@@ -99,6 +101,11 @@ document.getElementById("formGeocerca").addEventListener("submit", async (e) => 
   const id = document.getElementById("geocercaId").value;
 
   const payload = {
+    // La normalizacion real (mayusculas, sin espacios, vacio -> null) la
+    // hace el backend (bodegaController.js) — es la unica fuente de
+    // verdad para eso, aqui solo se envia el valor tal cual lo escribio
+    // el usuario.
+    codigo: document.getElementById("codigo").value,
     nombre: document.getElementById("nombre").value.trim(),
     direccion: document.getElementById("direccion").value.trim() || null,
     latitud: Number(document.getElementById("latitud").value),

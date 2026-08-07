@@ -17,9 +17,18 @@ CREATE TABLE IF NOT EXISTS bodegas (
   latitud       REAL NOT NULL,
   longitud      REAL NOT NULL,
   radio_metros  INTEGER NOT NULL DEFAULT 100,
+  -- Codigo corto opcional (ej. "BQZ1"), normalizado en mayusculas sin
+  -- espacios por bodegaController antes de guardar. Nullable: bodegas
+  -- creadas antes de este campo no tienen codigo hasta que se les asigne
+  -- uno. NOT NULL habria roto la migracion sobre datos existentes.
+  codigo        TEXT,
   activo        INTEGER NOT NULL DEFAULT 1,
   creado_en     TEXT NOT NULL DEFAULT (datetime('now', '-5 hours'))
 );
+-- El indice unico parcial de "codigo" se crea en migrate.js, DESPUES de
+-- garantizar que la columna existe (ALTER TABLE incremental para bases
+-- ya existentes) — si fuera parte de este archivo, correria antes que el
+-- ALTER TABLE sobre una base existente y fallaria con "no such column".
 
 CREATE TABLE IF NOT EXISTS empleados (
   id                      TEXT PRIMARY KEY,

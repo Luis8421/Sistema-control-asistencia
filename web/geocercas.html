@@ -24,6 +24,7 @@
         <table class="table table-sm table-hover align-middle">
           <thead>
             <tr>
+              <th>Código</th>
               <th>Nombre</th>
               <th>Direccion</th>
               <th>Latitud</th>
@@ -34,7 +35,7 @@
             </tr>
           </thead>
           <tbody id="tablaGeocercas">
-            <tr><td colspan="7" class="text-center text-muted py-4">Cargando...</td></tr>
+            <tr><td colspan="8" class="text-center text-muted py-4">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
@@ -52,6 +53,11 @@
           </div>
           <div class="modal-body">
             <input type="hidden" id="geocercaId" />
+
+            <div class="mb-2">
+              <label class="form-label small">Código <span class="text-muted">(opcional)</span></label>
+              <input type="text" class="form-control" id="codigo" placeholder="Ej. BQZ1" />
+            </div>
 
             <div class="mb-2">
               <label class="form-label small">Nombre</label>

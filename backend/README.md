@@ -70,8 +70,8 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
 | GET | `/api/indicadores/:empleadoId?desde&hasta` | JWT | Puntualidad, atrasos, ausencias y horas trabajadas en un rango (default: mes en curso) |
 | GET | `/api/bodegas?incluirInactivas=` | JWT (supervisor/admin) | Lista de geocercas (activas por defecto) |
-| POST | `/api/bodegas` | JWT (supervisor/admin) | Crear geocerca |
-| PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca |
+| POST | `/api/bodegas` | JWT (supervisor/admin) | Crear geocerca (`codigo` opcional, único, normalizado a mayúsculas) |
+| PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca (incluye `codigo`) |
 | DELETE | `/api/bodegas/:id` | JWT (supervisor/admin) | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
 | GET | `/api/empleados?page&limit&busqueda&activo` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado; `activo=true\|false` opcional |
 | POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado (`diasLaborables` opcional: arreglo 1-7, 1=lunes; default lunes-viernes) |

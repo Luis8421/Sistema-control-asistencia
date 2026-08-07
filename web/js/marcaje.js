@@ -48,6 +48,23 @@ async function apiRequest(path, { method = "GET", body } = {}) {
   return data;
 }
 
+// Formula de Haversine, identica a backend/src/utils/geo.js y
+// mobile/utils/geo.js. Se usa para un chequeo LOCAL de distancia antes de
+// llamar a /asistencia/marcar (evita un viaje redondo cuando el empleado
+// claramente esta fuera de rango). El backend siempre vuelve a calcular
+// esto de forma autoritativa — nunca se confia unicamente en este chequeo.
+function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
+  const RADIO_TIERRA_M = 6371000;
+  const rad = (grados) => (grados * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLon = rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return RADIO_TIERRA_M * c;
+}
+
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str ?? "";
@@ -183,6 +200,22 @@ async function marcar(tipo) {
   try {
     const coords = await obtenerUbicacion();
 
+    // Chequeo local antes de llamar al backend: evita un viaje redondo
+    // cuando el empleado claramente esta fuera de rango. Es solo UX — el
+    // backend vuelve a validar la distancia de forma autoritativa en cada
+    // peticion, sin importar lo que diga el cliente.
+    const bodega = getEmpleado()?.bodega;
+    if (bodega) {
+      const distanciaM = calcularDistanciaMetros(coords.latitude, coords.longitude, bodega.latitud, bodega.longitud);
+      if (distanciaM > bodega.radioMetros) {
+        resultado.textContent = "No se encuentra dentro del área autorizada para registrar asistencia.";
+        resultado.className = "alert mt-3 alert-danger";
+        resultado.classList.remove("d-none");
+        botones.forEach((b) => (b.disabled = false));
+        return;
+      }
+    }
+
     const data = await apiRequest("/asistencia/marcar", {
       method: "POST",
       body: {
@@ -202,18 +235,11 @@ async function marcar(tipo) {
   } catch (err) {
     if (manejarSesionExpirada(err)) return;
 
-    // El backend guarda igual el marcaje invalido (422) y devuelve el
-    // registro + mensaje explicando el motivo (fuera de rango, etc).
-    if (err.data?.registro) {
-      resultado.textContent = err.data.mensaje;
-      resultado.className = "alert mt-3 alert-danger";
-      resultado.classList.remove("d-none");
-      cargarHistorial();
-    } else {
-      resultado.textContent = err.data?.error || err.message || "No se pudo registrar el marcaje.";
-      resultado.className = "alert mt-3 alert-danger";
-      resultado.classList.remove("d-none");
-    }
+    // Un marcaje rechazado (422: fuera de rango, GPS impreciso/simulado)
+    // nunca se registra — no hay "registro" que mostrar, solo el motivo.
+    resultado.textContent = err.data?.error || err.message || "No se pudo registrar el marcaje.";
+    resultado.className = "alert mt-3 alert-danger";
+    resultado.classList.remove("d-none");
   } finally {
     botones.forEach((b) => (b.disabled = false));
   }

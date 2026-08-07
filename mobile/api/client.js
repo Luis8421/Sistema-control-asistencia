@@ -61,10 +61,10 @@ export async function logout() {
   await clearToken();
 }
 
-export async function marcarAsistencia({ tipo, latitud, longitud, precisionM, dispositivoId }) {
+export async function marcarAsistencia({ tipo, latitud, longitud, precisionM, ubicacionSimulada, dispositivoId }) {
   return request("/asistencia/marcar", {
     method: "POST",
-    body: { tipo, latitud, longitud, precisionM, dispositivoId },
+    body: { tipo, latitud, longitud, precisionM, ubicacionSimulada, dispositivoId },
   });
 }
 

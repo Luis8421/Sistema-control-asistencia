@@ -47,8 +47,9 @@ o con la cámara (iOS) para abrir la app en tu celular.
 2. Presiona "Marcar Entrada". La app pedirá permiso de ubicación la primera
    vez.
 3. Si estás dentro del radio autorizado de la bodega configurada en el
-   backend, verás el mensaje de marcaje válido; si no, verás el motivo
-   (fuera de rango, precisión insuficiente, etc.).
+   backend, verás el mensaje de marcaje válido; si no, el marcaje se
+   rechaza (no se guarda nada) y verás el motivo (fuera de rango,
+   precisión insuficiente, etc.).
 
 > Para probar un marcaje "válido" sin estar físicamente en la bodega real,
 > ajusta la latitud/longitud de la bodega en `backend/src/seed.js` a tu

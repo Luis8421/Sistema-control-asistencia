@@ -38,8 +38,34 @@ async function login(req, res) {
       codigoEmpleado: empleado.codigo_empleado,
       rol: empleado.rol,
       bodegaId: empleado.bodega_id,
+      bodega: obtenerBodegaParaValidacion(empleado.bodega_id),
     },
   });
+}
+
+/**
+ * Geocerca de la bodega asignada, en la forma que necesitan los clientes
+ * (app movil, marcaje web) para poder validar la distancia LOCALMENTE
+ * antes de intentar marcar — evita un viaje redondo innecesario cuando el
+ * empleado claramente esta fuera de rango. Esto es solo una optimizacion
+ * de UX: el backend (utils/geo.js) vuelve a validar la distancia de forma
+ * autoritativa en cada POST /asistencia/marcar sin importar lo que diga
+ * el cliente.
+ *
+ * Los empleados no tienen acceso a GET /api/bodegas (esta reservado a
+ * supervisor/admin), asi que la unica forma de que un empleado conozca
+ * la geocerca de SU PROPIA bodega es que viaje aqui, en el login.
+ */
+function obtenerBodegaParaValidacion(bodegaId) {
+  const bodega = db.prepare("SELECT id, nombre, latitud, longitud, radio_metros FROM bodegas WHERE id = ?").get(bodegaId);
+  if (!bodega) return null;
+  return {
+    id: bodega.id,
+    nombre: bodega.nombre,
+    latitud: bodega.latitud,
+    longitud: bodega.longitud,
+    radioMetros: bodega.radio_metros,
+  };
 }
 
 /**
@@ -89,6 +115,7 @@ async function registro(req, res) {
       codigoEmpleado,
       rol: "empleado",
       bodegaId: bodega.id,
+      bodega: obtenerBodegaParaValidacion(bodega.id),
     },
   });
 }

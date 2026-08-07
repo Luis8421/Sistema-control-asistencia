@@ -10,6 +10,25 @@ const MAX_FILAS_EXPORTACION = 5000;
 const MAX_GPS_PRECISION_M = Number(process.env.MAX_GPS_PRECISION_M || 50);
 
 /**
+ * Mensaje que ve el empleado cuando el marcaje se rechaza. El texto de
+ * "fuera_de_rango" es literal, pedido explicitamente: cualquier cambio de
+ * redaccion ahi debe ser intencional.
+ */
+function mensajeRechazo(motivo, distanciaM, radioMetros) {
+  switch (motivo) {
+    case "fuera_de_rango":
+      return `No se encuentra dentro del área autorizada para registrar asistencia. Estás a ${Math.round(distanciaM)} m (radio permitido: ${radioMetros} m).`;
+    case "precision_insuficiente":
+      return "La precisión de tu GPS no es suficiente para validar el marcaje. Intenta nuevamente en un lugar con mejor señal.";
+    case "gps_simulado":
+      return "No se puede registrar el marcaje: se detectó una ubicación simulada (mock location).";
+    case "precision_invalida":
+    default:
+      return "No se recibió una precisión de GPS válida. Verifica que la ubicación esté activada e intenta de nuevo.";
+  }
+}
+
+/**
  * POST /api/asistencia/marcar
  * body: { tipo: "entrada"|"salida", latitud, longitud, precisionM, ubicacionSimulada, dispositivoId, foto }
  *
@@ -18,6 +37,12 @@ const MAX_GPS_PRECISION_M = Number(process.env.MAX_GPS_PRECISION_M || 50);
  *
  * `foto` es opcional: la app movil no la envia (ya tiene otros controles),
  * el marcaje web si la exige antes de llamar a este endpoint.
+ *
+ * Validacion de geocerca OBLIGATORIA: un marcaje fuera del radio
+ * autorizado (o con GPS invalido/simulado/impreciso) se RECHAZA y no se
+ * guarda ningun registro — el backend es la unica fuente de verdad, la
+ * app movil/web solo hacen un chequeo local previo como optimizacion de
+ * UX (ver mobile/utils/geo.js y web/js/marcaje.js), nunca se confia en el.
  */
 function marcar(req, res) {
   const { tipo, latitud, longitud, precisionM, ubicacionSimulada, dispositivoId, foto } = req.body;
@@ -27,15 +52,6 @@ function marcar(req, res) {
   }
   if (typeof latitud !== "number" || typeof longitud !== "number") {
     return res.status(400).json({ error: "latitud y longitud son requeridas y deben ser numericas" });
-  }
-
-  let fotoUrl = null;
-  if (foto) {
-    try {
-      fotoUrl = guardarFotoBase64(foto);
-    } catch (err) {
-      return res.status(400).json({ error: err.message });
-    }
   }
 
   const empleado = db.prepare("SELECT * FROM empleados WHERE id = ?").get(req.usuario.id);
@@ -55,13 +71,32 @@ function marcar(req, res) {
     ubicacionSimulada: !!ubicacionSimulada,
   });
 
+  if (!valido) {
+    return res.status(422).json({
+      error: mensajeRechazo(motivo, distanciaM, bodega.radio_metros),
+      motivo,
+      distanciaM: Math.round(distanciaM),
+    });
+  }
+
+  // La foto solo se decodifica/guarda si el marcaje va a quedar registrado
+  // (evita dejar archivos huerfanos en uploads/fotos/ por marcajes que se
+  // terminan rechazando por geocerca).
+  let fotoUrl = null;
+  if (foto) {
+    try {
+      fotoUrl = guardarFotoBase64(foto);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+
   const id = uuidv4();
 
-  // El registro se guarda SIEMPRE, valido o no, para trazabilidad/auditoria.
   db.prepare(
     `INSERT INTO registros_asistencia
       (id, tipo, latitud, longitud, precision_gps_m, distancia_a_bodega_m, valido, motivo_invalido, dispositivo_id, foto_url, empleado_id, bodega_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?)`
   ).run(
     id,
     tipo,
@@ -69,8 +104,6 @@ function marcar(req, res) {
     longitud,
     precisionM ?? null,
     distanciaM,
-    valido ? 1 : 0,
-    motivo,
     dispositivoId ?? null,
     fotoUrl,
     empleado.id,
@@ -79,11 +112,9 @@ function marcar(req, res) {
 
   const registro = db.prepare("SELECT * FROM registros_asistencia WHERE id = ?").get(id);
 
-  return res.status(valido ? 201 : 422).json({
+  return res.status(201).json({
     registro,
-    mensaje: valido
-      ? "Marcaje registrado y validado correctamente."
-      : `Marcaje registrado pero NO valido (motivo: ${motivo}). Distancia a la bodega: ${Math.round(distanciaM)} m.`,
+    mensaje: "Marcaje registrado y validado correctamente.",
   });
 }
 

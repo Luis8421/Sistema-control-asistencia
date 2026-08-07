@@ -65,7 +65,7 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 |---|---|---|---|
 | POST | `/api/auth/login` | - | Login de empleado/supervisor, devuelve JWT |
 | POST | `/api/auth/registro` | - | Autoregistro (nombreCompleto, email, password) con rol `empleado`, devuelve JWT |
-| POST | `/api/asistencia/marcar` | JWT | Registra entrada/salida y valida geocerca |
+| POST | `/api/asistencia/marcar` | JWT | Valida geocerca (Haversine) y registra entrada/salida; `422` sin guardar nada si está fuera de rango o el GPS no es confiable |
 | GET | `/api/asistencia/historial/:empleadoId` | JWT | Historial de un empleado |
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
 | GET | `/api/indicadores/:empleadoId?desde&hasta` | JWT | Puntualidad, atrasos, ausencias y horas trabajadas en un rango (default: mes en curso) |
@@ -126,20 +126,34 @@ src/
 
 ## Configuración de geovalidación
 
+Validación de geocerca **obligatoria y bloqueante**: `POST /api/asistencia/marcar`
+calcula la distancia con Haversine (`src/utils/geo.js`) contra la bodega
+asignada al empleado y, si el marcaje no pasa la validación, **lo rechaza
+con `422` y no guarda ningún registro** — a diferencia de versiones
+anteriores de este proyecto, que guardaban igual los marcajes inválidos
+para trazabilidad. El backend es la única fuente de verdad: la app móvil
+(`mobile/utils/geo.js`) y el marcaje web (`web/js/marcaje.js`) hacen el
+mismo cálculo *localmente* antes de llamar a la API, pero solo como
+optimización de UX (evita un viaje redondo cuando el empleado claramente
+está fuera de rango) — nunca se confía en ese chequeo del lado del cliente.
+
 En `.env`:
 - `MAX_GPS_PRECISION_M`: si el GPS del dispositivo reporta una precisión
-  peor que este valor (en metros), el marcaje se invalida
-  (`motivo_invalido: "precision_insuficiente"`).
+  peor que este valor (en metros), el marcaje se rechaza.
 - El radio autorizado se define por bodega, en la columna `radio_metros`
-  de la tabla `bodegas`.
+  de la tabla `bodegas` (configurable por sucursal desde el panel,
+  `geocercas.html`).
 
-Un marcaje se invalida automáticamente si:
-- la distancia a la bodega supera `radio_metros`,
-- la precisión del GPS es peor que `MAX_GPS_PRECISION_M`, o
+Un marcaje se rechaza (`422`, sin guardar nada) si:
+- la distancia a la bodega supera `radio_metros` — mensaje exacto: *"No
+  se encuentra dentro del área autorizada para registrar asistencia."*
+- la precisión del GPS es peor que `MAX_GPS_PRECISION_M`, o no vino un
+  numero valido,
 - el dispositivo reporta ubicación simulada (`mock location`).
 
-En los tres casos el registro **se guarda igual**, marcado como inválido,
-para que quede evidencia y el supervisor pueda revisarlo.
+Registros de marcajes inválidos anteriores a este cambio (columna `valido`
+en `registros_asistencia`) se conservan para no perder historial, pero no
+se generan más desde que este comportamiento entró en vigor.
 
 ## Pasar a PostgreSQL (recomendado para producción)
 

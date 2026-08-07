@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Pla
 import * as Location from "expo-location";
 import * as Application from "expo-application";
 import { marcarAsistencia, logout } from "../api/client";
+import { calcularDistanciaMetros } from "../utils/geo";
 
 // ID estable por dispositivo/instalacion: Android ID en Android,
 // identifierForVendor en iOS. No cambia entre sesiones como Constants.sessionId.
@@ -47,6 +48,27 @@ export default function MarcajeScreen({ route, navigation }) {
     setUltimoResultado(null);
     try {
       const ubicacion = await capturarUbicacion();
+
+      // Chequeo local antes de llamar al backend: evita un viaje redondo
+      // cuando el empleado claramente esta fuera de rango. Es solo UX —
+      // el backend vuelve a validar la distancia de forma autoritativa
+      // en cada peticion, sin importar lo que diga el cliente.
+      if (empleado.bodega) {
+        const distanciaM = calcularDistanciaMetros(
+          ubicacion.latitud,
+          ubicacion.longitud,
+          empleado.bodega.latitud,
+          empleado.bodega.longitud
+        );
+        if (distanciaM > empleado.bodega.radioMetros) {
+          Alert.alert(
+            "Fuera del área autorizada",
+            "No se encuentra dentro del área autorizada para registrar asistencia."
+          );
+          return;
+        }
+      }
+
       const dispositivoId = await obtenerDispositivoId();
 
       const resultado = await marcarAsistencia({
@@ -54,18 +76,16 @@ export default function MarcajeScreen({ route, navigation }) {
         latitud: ubicacion.latitud,
         longitud: ubicacion.longitud,
         precisionM: ubicacion.precisionM,
+        ubicacionSimulada: ubicacion.ubicacionSimulada,
         dispositivoId,
       });
 
       setUltimoResultado({ ok: true, ...resultado });
     } catch (e) {
-      const data = e.data || {};
-      if (data.registro) {
-        // El backend devuelve 422 cuando el marcaje se guarda pero es invalido
-        setUltimoResultado({ ok: false, ...data });
-      } else {
-        Alert.alert("No se pudo registrar el marcaje", e.message || "Intenta nuevamente.");
-      }
+      // Cubre tanto el rechazo del backend (422: fuera de rango, GPS
+      // impreciso/simulado) como no tener permiso de ubicacion: en ambos
+      // casos el marcaje no se registra y se avisa por que.
+      Alert.alert("No se pudo registrar el marcaje", e.message || "Intenta nuevamente.");
     } finally {
       setCargando(null);
     }
@@ -102,12 +122,12 @@ export default function MarcajeScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* ultimoResultado solo se llena en exito: un marcaje rechazado
+          (fuera de rango, GPS invalido) nunca se registra, se avisa por
+          Alert y no queda nada que mostrar aqui. */}
       {ultimoResultado && (
         <View
-          style={[
-            styles.resultado,
-            { backgroundColor: ultimoResultado.registro?.valido ? "#e8f6ec" : "#fdecea" },
-          ]}
+          style={[styles.resultado, { backgroundColor: "#e8f6ec" }]}
         >
           <Text style={styles.resultadoTexto}>{ultimoResultado.mensaje}</Text>
         </View>

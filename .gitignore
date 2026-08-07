@@ -22,6 +22,10 @@ backend/uploads/fotos/*
 # Datos de importacion (pueden contener PII de empleados reales)
 backend/data/*.csv
 
+# Reportes de cobertura de tests (c8)
+backend/coverage/
+backend/.nyc_output/
+
 # Logs
 *.log
 npm-debug.log*

@@ -107,7 +107,22 @@ src/
   seed.js                      # datos de ejemplo
   backup.js                     # backup de dev.db (npm run backup)
   server.js                    # punto de entrada
+test/
+  geo.test.js       # suite de validarGeocerca() / calcularDistanciaMetros
 ```
+
+## Tests
+
+```bash
+npm test              # corre la suite (node --test, sin dependencias externas)
+npm run test:coverage # igual, mas reporte de cobertura (c8)
+```
+
+Cubre `src/utils/geo.js` — la geovalidación (`validarGeocerca`) es la
+pieza mas critica del sistema (decide si un marcaje se acepta o se
+rechaza), asi que tiene la unica suite de tests del proyecto por ahora.
+No depende de la app movil, del panel web, ni de un backend corriendo:
+son pruebas unitarias puras sobre la funcion.
 
 ## Producción
 
@@ -144,12 +159,26 @@ En `.env`:
   de la tabla `bodegas` (configurable por sucursal desde el panel,
   `geocercas.html`).
 
-Un marcaje se rechaza (`422`, sin guardar nada) si:
-- la distancia a la bodega supera `radio_metros` — mensaje exacto: *"No
-  se encuentra dentro del área autorizada para registrar asistencia."*
-- la precisión del GPS es peor que `MAX_GPS_PRECISION_M`, o no vino un
-  numero valido,
-- el dispositivo reporta ubicación simulada (`mock location`).
+Un marcaje se rechaza (`422`, sin guardar nada) si (`motivo` en la
+respuesta entre parentesis):
+- la distancia a la bodega supera `radio_metros` (`fuera_de_rango`) —
+  mensaje exacto: *"No se encuentra dentro del área autorizada para
+  registrar asistencia."*
+- la precisión del GPS es peor que `MAX_GPS_PRECISION_M`
+  (`precision_insuficiente`), o no vino un numero valido
+  (`precision_invalida`),
+- el dispositivo reporta ubicación simulada (`gps_simulado`),
+- las coordenadas del empleado no son numeros validos o estan fuera del
+  rango geografico posible (`coordenadas_invalidas`),
+- la bodega asignada no tiene coordenadas o radio validos
+  (`bodega_mal_configurada` — error de configuración del admin, no del
+  empleado).
+
+Estas dos ultimas son una capa de defensa dentro de `validarGeocerca()`
+misma (no solo en el controlador): protegen la funcion contra coordenadas
+basura que, sin este chequeo, producirian una distancia `NaN` y `NaN >
+radio` evalua a `false` en JS — pasando como "valido" por accidente. Ver
+`test/geo.test.js` para la cobertura completa de estos casos.
 
 Registros de marcajes inválidos anteriores a este cambio (columna `valido`
 en `registros_asistencia`) se conservan para no perder historial, pero no

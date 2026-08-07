@@ -22,6 +22,10 @@ function mensajeRechazo(motivo, distanciaM, radioMetros) {
       return "La precisión de tu GPS no es suficiente para validar el marcaje. Intenta nuevamente en un lugar con mejor señal.";
     case "gps_simulado":
       return "No se puede registrar el marcaje: se detectó una ubicación simulada (mock location).";
+    case "coordenadas_invalidas":
+      return "No se recibieron coordenadas GPS válidas. Verifica que la ubicación esté activada e intenta de nuevo.";
+    case "bodega_mal_configurada":
+      return "La geocerca de tu sucursal no está configurada correctamente. Contacta al administrador.";
     case "precision_invalida":
     default:
       return "No se recibió una precisión de GPS válida. Verifica que la ubicación esté activada e intenta de nuevo.";
@@ -75,7 +79,9 @@ function marcar(req, res) {
     return res.status(422).json({
       error: mensajeRechazo(motivo, distanciaM, bodega.radio_metros),
       motivo,
-      distanciaM: Math.round(distanciaM),
+      // null cuando el rechazo fue antes de poder calcular una distancia
+      // real (coordenadas o bodega invalidas), no un 0 enganoso.
+      distanciaM: typeof distanciaM === "number" ? Math.round(distanciaM) : null,
     });
   }
 

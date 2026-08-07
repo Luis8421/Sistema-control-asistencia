@@ -28,6 +28,15 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   return RADIO_TIERRA_M * c;
 }
 
+function esNumeroFinito(valor) {
+  return typeof valor === "number" && Number.isFinite(valor);
+}
+
+/** Rango geografico valido: latitud [-90, 90], longitud [-180, 180]. */
+function coordenadaValida(lat, lon) {
+  return esNumeroFinito(lat) && esNumeroFinito(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
 /**
  * Valida si un marcaje ocurre dentro de la geocerca de una bodega,
  * y con una precision de GPS aceptable.
@@ -48,6 +57,28 @@ function validarGeocerca({
   maxPrecisionAceptadaM,
   ubicacionSimulada,
 }) {
+  // Geocerca mal configurada (bodega ausente, sin coordenadas validas, o
+  // con radio invalido/negativo): es un problema de datos administrativos,
+  // no algo que el empleado resuelva reintentando. Se revisa primero para
+  // no calcular una distancia sin sentido contra una bodega rota.
+  if (
+    !bodega ||
+    !coordenadaValida(bodega.latitud, bodega.longitud) ||
+    !esNumeroFinito(bodega.radioMetros) ||
+    bodega.radioMetros < 0
+  ) {
+    return { valido: false, distanciaM: null, motivo: "bodega_mal_configurada" };
+  }
+
+  // Coordenadas del empleado invalidas (no numericas, NaN/Infinity, o
+  // fuera del rango geografico posible). Sin este chequeo, coordenadas
+  // basura producen una distancia NaN, y en JS "NaN > radio" es false,
+  // asi que el marcaje pasaria como valido por accidente — el mismo tipo
+  // de vector que la validacion de geocerca existe para cerrar.
+  if (!coordenadaValida(lat, lon)) {
+    return { valido: false, distanciaM: null, motivo: "coordenadas_invalidas" };
+  }
+
   const distanciaM = calcularDistanciaMetros(
     lat,
     lon,

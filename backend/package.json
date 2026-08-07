@@ -10,7 +10,9 @@
     "migrate": "node src/db/migrate.js",
     "seed": "node src/seed.js",
     "backup": "node src/backup.js",
-    "import-empleados": "node src/importEmpleados.js"
+    "import-empleados": "node src/importEmpleados.js",
+    "test": "node --test",
+    "test:coverage": "c8 --reporter=text --reporter=text-summary node --test"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -26,6 +28,7 @@
     "uuid": "^14.0.1"
   },
   "devDependencies": {
+    "c8": "^12.0.0",
     "nodemon": "^3.1.4"
   }
 }

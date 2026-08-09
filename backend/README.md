@@ -65,7 +65,7 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 |---|---|---|---|
 | POST | `/api/auth/login` | - | Login de empleado/supervisor, devuelve JWT |
 | POST | `/api/auth/registro` | - | Autoregistro (nombreCompleto, email, password) con rol `empleado`, devuelve JWT |
-| POST | `/api/asistencia/marcar` | JWT | Valida geocerca (Haversine), secuencia del día (no permite dos entradas/salidas seguidas) y registra entrada/salida; `422` sin guardar nada si algo falla |
+| POST | `/api/asistencia/marcar` | JWT | Valida geocerca (Haversine) contra las bodegas candidatas del empleado (`autorizado_todas_bodegas`: todas las activas, o solo su `bodega_id`), secuencia del día, y registra entrada/salida; `422` sin guardar nada si algo falla; `409` si el GPS coincide con 2+ bodegas candidatas a la vez (ver `bodegaId` abajo) |
 | GET | `/api/asistencia/historial/:empleadoId?fecha=` | JWT | Historial de un empleado; `fecha=YYYY-MM-DD` opcional (sin ella, trae todo) |
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
 | GET | `/api/indicadores/:empleadoId?desde&hasta` | JWT | Puntualidad, atrasos, ausencias y horas trabajadas en un rango (default: mes en curso) |
@@ -75,7 +75,8 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | DELETE | `/api/bodegas/:id` | JWT (supervisor/admin) | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
 | GET | `/api/empleados?page&limit&busqueda&activo` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado; `activo=true\|false` opcional |
 | POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado (`diasLaborables` opcional: arreglo 1-7, 1=lunes; default lunes-viernes) |
-| PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado (incluye `diasLaborables`) |
+| PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado (incluye `diasLaborables`, `bodegaId`). Nunca modifica `autorizado_todas_bodegas` |
+| PUT | `/api/empleados/:id/autorizacion-bodegas` | JWT (supervisor/admin) | `{ autorizadoTodasBodegas: true\|false }` — único endpoint que puede cambiar esta autorización; auditado con valor anterior/nuevo |
 | DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
 | GET | `/api/marcaciones?page&limit&fecha&empleadoId&tipo&valido` | JWT (supervisor/admin) | Listado general de marcaciones, filtrable; `valido=true\|false` opcional |
 | GET | `/api/marcaciones/exportar?fecha&empleadoId&tipo` | JWT (supervisor/admin) | Mismos filtros, descarga un `.xlsx` (tope 5000 filas) |
@@ -205,6 +206,53 @@ si:
 Registros de marcajes inválidos anteriores a este cambio (columna `valido`
 en `registros_asistencia`) se conservan para no perder historial, pero no
 se generan más desde que este comportamiento entró en vigor.
+
+## Autorización de marcaje: `autorizado_todas_bodegas`
+
+Cada empleado tiene una columna `autorizado_todas_bodegas` (booleana,
+`DEFAULT 0`) que determina en qué bodegas puede intentar marcar. Es
+**independiente de `rol`** (no se infiere de admin/supervisor/empleado) y
+del catálogo de geocercas en sí — solo dice contra qué conjunto de
+bodegas se corre la validación GPS real:
+
+- **`autorizado_todas_bodegas = 1`**: candidatas = todas las bodegas con
+  `activo = 1` del catálogo completo, incluida Oficina Principal, sin
+  excepciones.
+- **`autorizado_todas_bodegas = 0`** (default): candidatas = únicamente
+  `empleados.bodega_id` (su bodega principal) — el mismo comportamiento
+  que existía antes de todo el trabajo de multi-bodega.
+
+En ambos casos, cada candidata pasa por `validarGeocerca()`
+(`utils/geo.js`, sin cambios) antes de aceptarse — el flag nunca
+reemplaza la validación GPS, solo decide el universo de bodegas a
+evaluar. La secuencia entrada/salida (`utils/secuenciaMarcaje.js`, sin
+cambios) sigue siendo por empleado y día, no por bodega.
+
+**Comportamiento según cuántas bodegas candidatas validan el GPS:**
+
+| Resultado | Respuesta |
+|---|---|
+| Ninguna | `422`, informa distancia a la más cercana **entre las candidatas** (para un empleado sin autorización global, eso es simplemente su propia bodega) |
+| Exactamente 1 | `201` automático, sin pedir nada más |
+| 2 o más simultáneamente (ej. `BOCQ`/`BDCQ`, que comparten coordenadas — solo posible con autorización global) | `409`, `{ motivo: "seleccion_bodega_requerida", opciones: [...] }` — **no elige ninguna por desempate automático** |
+
+Para resolver el caso de `409`, el cliente reenvía la misma marcación
+agregando `bodegaId` con la elección del empleado. El backend **nunca
+confía en ese valor tal cual**: verifica que la bodega exista, esté
+activa y sea una candidata válida para ese empleado (`422
+bodega_no_autorizada` si no) y vuelve a correr `validarGeocerca()` contra
+esa bodega específica antes de aceptar.
+
+**Gestión desde el panel**: `PUT /api/empleados/:id/autorizacion-bodegas`
+con `{ autorizadoTodasBodegas: true|false }` es el **único** endpoint que
+puede tocar esta columna — auditado con valor anterior y nuevo. El PUT
+general de empleado (`PUT /api/empleados/:id`) nunca la modifica, ni
+siquiera si el body incluye `bodegaId`.
+
+**Nota histórica**: existe una tabla `empleado_bodegas` (empleado_id,
+bodega_id) de un diseño anterior (autorización individual por bodega).
+Ya no la lee ni la escribe ningún endpoint — queda en la base sin uso,
+pendiente de una eliminación futura evaluada por separado.
 
 ## Pasar a PostgreSQL (recomendado para producción)
 

@@ -47,18 +47,21 @@ async function login(req, res) {
       rol: empleado.rol,
       bodegaId: empleado.bodega_id,
       bodega: obtenerBodegaParaValidacion(empleado.bodega_id),
+      // Autorizacion de marcaje, independiente de rol: si es true, el
+      // Portal sabe que debe dejar que el backend decida siempre (no tiene
+      // sentido un chequeo local de una sola geocerca) y puede mostrar una
+      // etiqueta acorde ("autorizado en cualquier bodega").
+      autorizadoTodasBodegas: !!empleado.autorizado_todas_bodegas,
     },
   });
 }
 
 /**
- * Geocerca de la bodega asignada, en la forma que necesitan los clientes
- * (app movil, marcaje web) para poder validar la distancia LOCALMENTE
- * antes de intentar marcar — evita un viaje redondo innecesario cuando el
- * empleado claramente esta fuera de rango. Esto es solo una optimizacion
- * de UX: el backend (utils/geo.js) vuelve a validar la distancia de forma
- * autoritativa en cada POST /asistencia/marcar sin importar lo que diga
- * el cliente.
+ * Geocerca de la bodega PRINCIPAL (empleados.bodega_id), en la forma que
+ * necesitan los clientes para el chequeo local de UX. Esto es solo una
+ * optimizacion: el backend (utils/geo.js) vuelve a validar la distancia
+ * de forma autoritativa en cada POST /asistencia/marcar sin importar lo
+ * que diga el cliente.
  *
  * Los empleados no tienen acceso a GET /api/bodegas (esta reservado a
  * supervisor/admin), asi que la unica forma de que un empleado conozca
@@ -109,6 +112,10 @@ async function registro(req, res) {
      VALUES (?, ?, ?, ?, ?, 'empleado', ?)`
   ).run(id, nombreCompleto, codigoEmpleado, email, passwordHash, bodega.id);
 
+  // autorizado_todas_bodegas nace en 0 (DEFAULT de la columna): el
+  // autoregistro NUNCA otorga autorizacion global. El empleado queda
+  // restringido a bodega.id (su bodega principal) hasta que un admin se
+  // la conceda explicitamente via PUT /:id/autorizacion-bodegas.
   const token = jwt.sign(
     { id, email, rol: "empleado" },
     process.env.JWT_SECRET,
@@ -125,6 +132,7 @@ async function registro(req, res) {
       rol: "empleado",
       bodegaId: bodega.id,
       bodega: obtenerBodegaParaValidacion(bodega.id),
+      autorizadoTodasBodegas: false,
     },
   });
 }

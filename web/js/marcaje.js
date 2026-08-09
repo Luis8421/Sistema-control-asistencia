@@ -132,9 +132,19 @@ function mostrarBloqueMarcaje() {
   const empleado = getEmpleado();
   document.getElementById("nombreEmpleado").textContent = empleado.nombreCompleto;
   document.getElementById("cargoEmpleado").textContent = empleado.cargo || "";
-  document.getElementById("bodegaEmpleado").textContent = empleado.bodega?.nombre
-    ? `Sucursal: ${empleado.bodega.nombre}`
-    : "";
+
+  // autorizadoTodasBodegas es un campo del login, independiente de
+  // "bodega" (singular, que sigue siendo la bodega principal para
+  // compatibilidad). Para la enorme mayoria de empleados es false — para
+  // esos se muestra su sucursal; los autorizados globalmente ven una
+  // etiqueta acorde (su "bodega" principal ya no restringe donde marcan).
+  let textoBodega = "";
+  if (empleado.autorizadoTodasBodegas) {
+    textoBodega = "Autorizado en cualquier bodega activa";
+  } else if (empleado.bodega?.nombre) {
+    textoBodega = `Sucursal: ${empleado.bodega.nombre}`;
+  }
+  document.getElementById("bodegaEmpleado").textContent = textoBodega;
 
   iniciarReloj();
   cargarHistorial();
@@ -250,23 +260,47 @@ async function marcar(tipo) {
 
   try {
     const coords = await obtenerUbicacion();
+    const empleado = getEmpleado();
 
-    // Chequeo local antes de llamar al backend: evita un viaje redondo
-    // cuando el empleado claramente esta fuera de rango. Es solo UX — el
-    // backend vuelve a validar la distancia de forma autoritativa en cada
-    // peticion, sin importar lo que diga el cliente.
-    const bodega = getEmpleado()?.bodega;
-    if (bodega) {
-      const distanciaM = calcularDistanciaMetros(coords.latitude, coords.longitude, bodega.latitud, bodega.longitud);
-      if (distanciaM > bodega.radioMetros) {
-        resultado.textContent = "No se encuentra dentro del área autorizada para registrar asistencia.";
-        resultado.className = "alert mt-3 alert-danger";
-        resultado.classList.remove("d-none");
-        botones.forEach((b) => (b.disabled = false));
-        return;
+    // Chequeo local SOLO para empleados restringidos a su bodega principal
+    // (autorizadoTodasBodegas=false): evita un viaje redondo cuando
+    // claramente estan fuera de rango. Un autorizado a todas las bodegas
+    // puede estar cerca de CUALQUIER geocerca del catalogo, no solo la de
+    // su bodega principal — replicar esa logica en el cliente duplicaria
+    // al backend sin necesidad real, asi que para esos se va directo a la
+    // API, que de todas formas es la unica fuente de verdad.
+    if (!empleado?.autorizadoTodasBodegas) {
+      const bodega = empleado?.bodega;
+      if (bodega) {
+        const distanciaM = calcularDistanciaMetros(coords.latitude, coords.longitude, bodega.latitud, bodega.longitud);
+        if (distanciaM > bodega.radioMetros) {
+          resultado.textContent = "No se encuentra dentro del área autorizada para registrar asistencia.";
+          resultado.className = "alert mt-3 alert-danger";
+          resultado.classList.remove("d-none");
+          botones.forEach((b) => (b.disabled = false));
+          return;
+        }
       }
     }
 
+    await intentarMarcar({ tipo, coords, foto, resultado, botones });
+  } catch (err) {
+    if (manejarSesionExpirada(err)) return;
+    resultado.textContent = err.data?.error || err.message || "No se pudo registrar el marcaje.";
+    resultado.className = "alert mt-3 alert-danger";
+    resultado.classList.remove("d-none");
+    botones.forEach((b) => (b.disabled = false));
+  }
+}
+
+/**
+ * Llama a POST /asistencia/marcar. Se usa tanto para el primer intento
+ * (sin bodegaId) como para el reintento tras elegir una bodega en el
+ * selector (con bodegaId) — misma foto/coords capturadas una sola vez,
+ * nunca se le vuelve a pedir camara/GPS al empleado por esto.
+ */
+async function intentarMarcar({ tipo, coords, foto, resultado, botones, bodegaId }) {
+  try {
     const data = await apiRequest("/asistencia/marcar", {
       method: "POST",
       body: {
@@ -276,24 +310,72 @@ async function marcar(tipo) {
         precisionM: coords.accuracy,
         dispositivoId: "web-" + (getEmpleado()?.id || "anon"),
         foto,
+        ...(bodegaId ? { bodegaId } : {}),
       },
     });
 
     resultado.textContent = data.mensaje;
     resultado.className = "alert mt-3 alert-success";
     resultado.classList.remove("d-none");
+    botones.forEach((b) => (b.disabled = false));
     cargarHistorial();
   } catch (err) {
-    if (manejarSesionExpirada(err)) return;
-
-    // Un marcaje rechazado (422: fuera de rango, GPS impreciso/simulado)
-    // nunca se registra — no hay "registro" que mostrar, solo el motivo.
-    resultado.textContent = err.data?.error || err.message || "No se pudo registrar el marcaje.";
-    resultado.className = "alert mt-3 alert-danger";
-    resultado.classList.remove("d-none");
-  } finally {
-    botones.forEach((b) => (b.disabled = false));
+    // El GPS coincide con mas de una bodega autorizada a la vez (ej.
+    // BOCQ/BDCQ, que comparten predio): el backend nunca elige por
+    // desempate automatico, pide seleccion explicita. Los botones quedan
+    // deshabilitados hasta que el empleado elija o cancele.
+    if (err.status === 409 && err.data?.motivo === "seleccion_bodega_requerida") {
+      mostrarSelectorBodega(err.data.opciones, { tipo, coords, foto, resultado, botones });
+      return;
+    }
+    throw err; // el resto de errores (422, sesion expirada) los maneja marcar()
   }
+}
+
+function mostrarSelectorBodega(opciones, contexto) {
+  const contenedor = document.getElementById("opcionesBodega");
+  contenedor.innerHTML = opciones
+    .map(
+      (o) =>
+        `<button type="button" class="btn btn-outline-primary btn-seleccionar-bodega" data-id="${escapeHtml(o.id)}">${escapeHtml(o.codigo)} — ${escapeHtml(o.nombre)}</button>`
+    )
+    .join("");
+
+  const modalEl = document.getElementById("modalSeleccionBodega");
+  const modal = new bootstrap.Modal(modalEl);
+
+  contenedor.querySelectorAll(".btn-seleccionar-bodega").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      async () => {
+        modal.hide();
+        contexto.resultado.textContent = "Registrando...";
+        contexto.resultado.className = "alert mt-3 alert-info";
+        contexto.resultado.classList.remove("d-none");
+        try {
+          await intentarMarcar({ ...contexto, bodegaId: btn.dataset.id });
+        } catch (err) {
+          if (manejarSesionExpirada(err)) return;
+          contexto.resultado.textContent = err.data?.error || err.message || "No se pudo registrar el marcaje.";
+          contexto.resultado.className = "alert mt-3 alert-danger";
+          contexto.resultado.classList.remove("d-none");
+          contexto.botones.forEach((b) => (b.disabled = false));
+        }
+      },
+      { once: true }
+    );
+  });
+
+  document.getElementById("btnCancelarSeleccionBodega").addEventListener(
+    "click",
+    () => {
+      contexto.botones.forEach((b) => (b.disabled = false));
+      contexto.resultado.classList.add("d-none");
+    },
+    { once: true }
+  );
+
+  modal.show();
 }
 
 document.getElementById("btnEntrada").addEventListener("click", () => marcar("entrada"));
@@ -313,7 +395,7 @@ async function cargarHistorial() {
     pintarEstadoTurno(registrosHoy);
 
     if (registrosHoy.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-3">Sin marcaciones hoy todavia</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">Sin marcaciones hoy todavia</td></tr>`;
       return;
     }
 
@@ -323,6 +405,7 @@ async function cargarHistorial() {
       <tr>
         <td>${escapeHtml(r.timestamp_servidor.slice(11, 19))}</td>
         <td class="text-capitalize">${escapeHtml(r.tipo)}</td>
+        <td>${escapeHtml(r.bodega_nombre || "-")}</td>
         <td>${
           r.valido
             ? '<span class="badge badge-valido">Valido</span>'
@@ -333,7 +416,7 @@ async function cargarHistorial() {
       .join("");
   } catch (err) {
     if (manejarSesionExpirada(err)) return;
-    tbody.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-3">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
   }
 }
 

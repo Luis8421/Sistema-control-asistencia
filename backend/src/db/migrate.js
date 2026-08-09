@@ -34,4 +34,18 @@ if (!columnasBodegas.some((c) => c.name === "codigo")) {
 // IF NOT EXISTS lo hace seguro de correr en cada `npm run migrate`.
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_bodegas_codigo ON bodegas(codigo) WHERE codigo IS NOT NULL");
 
+if (!columnasEmpleados.some((c) => c.name === "autorizado_todas_bodegas")) {
+  db.exec("ALTER TABLE empleados ADD COLUMN autorizado_todas_bodegas INTEGER NOT NULL DEFAULT 0");
+  console.log("Columna autorizado_todas_bodegas agregada a empleados (default 0, sin autorizacion global).");
+}
+
+// NOTA: la tabla empleado_bodegas y su backfill (usados por el modelo de
+// autorizacion anterior, uno-a-muchos por empleado) ya NO se referencian
+// desde ningun controller — la autorizacion de marcaje ahora depende
+// exclusivamente de empleados.autorizado_todas_bodegas (ver arriba) y,
+// para quienes tienen ese campo en 0, de empleados.bodega_id. La tabla
+// empleado_bodegas se deja intacta en la base (no se hace DROP aqui ni en
+// ningun otro lugar de esta migracion) hasta que una fase separada,
+// explicitamente autorizada, decida eliminarla.
+
 console.log("Migracion aplicada correctamente. Tablas creadas/verificadas en:", db.name);

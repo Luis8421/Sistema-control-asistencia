@@ -76,11 +76,12 @@
               <tr>
                 <th>Hora</th>
                 <th>Tipo</th>
+                <th>Bodega</th>
                 <th>Estado</th>
               </tr>
             </thead>
             <tbody id="tablaHistorial">
-              <tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>
+              <tr><td colspan="4" class="text-center text-muted py-3">Cargando...</td></tr>
             </tbody>
           </table>
         </div>
@@ -88,6 +89,27 @@
     </div>
   </div>
 
+  <!-- Selector de bodega: solo aparece cuando el GPS coincide con mas de
+       una bodega autorizada a la vez (ej. BOCQ y BDCQ, que comparten
+       predio) — el backend nunca elige por desempate automatico. -->
+  <div class="modal fade" id="modalSeleccionBodega" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Selecciona tu bodega</h5>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Se detectó más de una bodega autorizada en esta ubicación. Selecciona dónde estás registrando tu asistencia.</p>
+          <div id="opcionesBodega" class="d-grid gap-2"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCancelarSeleccionBodega">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="js/marcaje.js"></script>
 </body>
 </html>

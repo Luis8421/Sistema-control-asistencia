@@ -48,6 +48,15 @@ CREATE TABLE IF NOT EXISTS empleados (
   -- comportamiento previo a que este campo existiera. La usa el calculo de
   -- ausencias en utils/indicadores.js.
   dias_laborables         TEXT NOT NULL DEFAULT '1,2,3,4,5',
+  -- Autorizacion de marcaje INDEPENDIENTE de rol y de bodega_id: si es 1,
+  -- el empleado puede intentar marcar en CUALQUIER bodega activa del
+  -- catalogo (asistenciaController.marcar() sigue validando su geocerca
+  -- real igual que siempre). Si es 0, mantiene el comportamiento anterior:
+  -- solo puede marcar dentro de la geocerca de su bodega_id. DEFAULT 0:
+  -- nadie recibe esta autorizacion automaticamente, ni al crearse ni por
+  -- ningun otro motivo — es una concesion explicita via el endpoint
+  -- dedicado PUT /api/empleados/:id/autorizacion-bodegas, nunca implicita.
+  autorizado_todas_bodegas INTEGER NOT NULL DEFAULT 0,
   creado_en               TEXT NOT NULL DEFAULT (datetime('now', '-5 hours'))
 );
 
@@ -88,3 +97,19 @@ CREATE TABLE IF NOT EXISTS auditoria (
 CREATE INDEX IF NOT EXISTS idx_auditoria_entidad ON auditoria(entidad, entidad_id);
 CREATE INDEX IF NOT EXISTS idx_auditoria_usuario ON auditoria(usuario_id);
 CREATE INDEX IF NOT EXISTS idx_auditoria_creado ON auditoria(creado_en);
+
+-- TABLA DE UN MODELO DE AUTORIZACION ANTERIOR, YA NO USADA. Ningun
+-- controller la lee ni la escribe: la autorizacion de marcaje depende
+-- exclusivamente de empleados.autorizado_todas_bodegas (si es 1, cualquier
+-- bodega activa es candidata; si es 0, solo empleados.bodega_id) — ver
+-- asistenciaController.obtenerBodegasCandidatas(). Se deja la tabla y sus
+-- datos intactos en la base (no se hace DROP aqui) hasta que una fase
+-- separada, explicitamente autorizada, evalue eliminarla.
+CREATE TABLE IF NOT EXISTS empleado_bodegas (
+  empleado_id TEXT NOT NULL REFERENCES empleados(id),
+  bodega_id   TEXT NOT NULL REFERENCES bodegas(id),
+  creado_en   TEXT NOT NULL DEFAULT (datetime('now', '-5 hours')),
+  PRIMARY KEY (empleado_id, bodega_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_empleado_bodegas_empleado ON empleado_bodegas(empleado_id);

@@ -7,7 +7,8 @@ const { registrarAuditoria } = require("../utils/auditoria");
 // Nunca se selecciona password_hash hacia el panel de administracion.
 const CAMPOS_PUBLICOS = `
   id, nombre_completo, codigo_empleado, cargo, email, rol, activo, bodega_id,
-  hora_entrada_esperada, hora_salida_esperada, tolerancia_min, dias_laborables, creado_en
+  hora_entrada_esperada, hora_salida_esperada, tolerancia_min, dias_laborables,
+  autorizado_todas_bodegas, creado_en
 `;
 
 /**
@@ -133,6 +134,10 @@ function crear(req, res) {
     diasLaborablesCsv ?? null
   );
 
+  // autorizado_todas_bodegas nace en 0 (DEFAULT de la columna): un
+  // empleado nuevo NUNCA recibe autorizacion global automaticamente, sin
+  // importar como se haya creado. Queda restringido a bodegaId hasta que
+  // un admin se la conceda explicitamente via PUT /:id/autorizacion-bodegas.
   const empleado = db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
 
   registrarAuditoria({
@@ -225,11 +230,52 @@ function actualizar(req, res) {
     entidadId: id,
     // Solo se registran los nombres de los campos que llegaron en el body
     // (no sus valores, y nunca la contrasena) para saber que se toco sin
-    // duplicar datos sensibles en el log de auditoria.
+    // duplicar datos sensibles en el log de auditoria. autorizado_todas_bodegas
+    // NUNCA se lee ni se escribe desde este endpoint (ver mas abajo el
+    // destructuring del body, que deliberadamente no lo incluye) — solo se
+    // modifica via el endpoint dedicado actualizarAutorizacionBodegas().
     detalle: { camposModificados: Object.keys(req.body) },
   });
 
   return res.json(actualizado);
+}
+
+/**
+ * PUT /api/empleados/:id/autorizacion-bodegas
+ * body: { autorizadoTodasBodegas: true|false }
+ * Unico endpoint que puede modificar autorizado_todas_bodegas. Separado a
+ * proposito de actualizar() (arriba): esa funcion edita nombre, cargo,
+ * horario, bodegaId, etc., y NUNCA debe tocar esta autorizacion como
+ * efecto secundario de un formulario general. La auditoria registra el
+ * valor anterior y el nuevo explicitamente (no solo el nombre del campo),
+ * porque es una decision de acceso, no un dato administrativo mas.
+ */
+function actualizarAutorizacionBodegas(req, res) {
+  const { id } = req.params;
+  const existente = db.prepare("SELECT id, autorizado_todas_bodegas FROM empleados WHERE id = ?").get(id);
+  if (!existente) {
+    return res.status(404).json({ error: "Empleado no encontrado" });
+  }
+
+  const { autorizadoTodasBodegas } = req.body;
+  if (typeof autorizadoTodasBodegas !== "boolean") {
+    return res.status(400).json({ error: "autorizadoTodasBodegas debe ser true o false" });
+  }
+
+  const valorAnterior = !!existente.autorizado_todas_bodegas;
+  const valorNuevo = autorizadoTodasBodegas;
+
+  db.prepare("UPDATE empleados SET autorizado_todas_bodegas = ? WHERE id = ?").run(valorNuevo ? 1 : 0, id);
+
+  registrarAuditoria({
+    usuario: req.usuario,
+    accion: "actualizar",
+    entidad: "empleado",
+    entidadId: id,
+    detalle: { campo: "autorizado_todas_bodegas", valorAnterior, valorNuevo },
+  });
+
+  return res.json({ empleadoId: id, autorizadoTodasBodegas: valorNuevo });
 }
 
 /**
@@ -255,4 +301,4 @@ function eliminar(req, res) {
   return res.status(204).send();
 }
 
-module.exports = { listar, crear, actualizar, eliminar };
+module.exports = { listar, crear, actualizar, actualizarAutorizacionBodegas, eliminar };

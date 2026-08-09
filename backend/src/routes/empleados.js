@@ -1,6 +1,6 @@
 const express = require("express");
 const { requiereAutenticacion, requiereRol } = require("../middleware/auth");
-const { listar, crear, actualizar, eliminar } = require("../controllers/empleadoController");
+const { listar, crear, actualizar, actualizarAutorizacionBodegas, eliminar } = require("../controllers/empleadoController");
 
 const router = express.Router();
 
@@ -11,6 +11,7 @@ router.use(requiereAutenticacion, requiereRol("supervisor", "admin"));
 router.get("/", listar);
 router.post("/", crear);
 router.put("/:id", actualizar);
+router.put("/:id/autorizacion-bodegas", actualizarAutorizacionBodegas);
 router.delete("/:id", eliminar);
 
 module.exports = router;

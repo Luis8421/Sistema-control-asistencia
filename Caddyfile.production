@@ -1,0 +1,27 @@
+# Caddyfile de PRODUCCION - para el VPS, no para esta PC.
+#
+# Diferencia clave contra el Caddyfile local (el que ya existe en la raiz
+# del repo, que usa "tls internal" para uso interno de oficina): este usa
+# un dominio publico real, asi que Caddy obtiene y renueva el certificado
+# de Let's Encrypt automaticamente (reto HTTP-01), sin configuracion
+# adicional. Tampoco se desactiva la redireccion HTTP->HTTPS (aqui nada
+# mas compite por el puerto 80).
+#
+# Instalar en el VPS como /etc/caddy/Caddyfile (o la ruta que use tu
+# instalacion de Caddy) y ajustar la ruta de "root" al lugar donde se
+# copie la carpeta web/ del proyecto.
+
+marcaciones.telconet.ec {
+	handle /api/* {
+		reverse_proxy localhost:4000
+	}
+
+	handle /uploads/* {
+		reverse_proxy localhost:4000
+	}
+
+	handle {
+		root * /opt/asistencia/web
+		file_server
+	}
+}

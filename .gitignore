@@ -12,6 +12,10 @@ backend/dev.db-shm
 backend/dev.db-wal
 backend/backups/
 
+# Backups manuales sueltos en la raiz (dev.db.bak.*, env.bak.* con
+# secretos reales como JWT_SECRET en texto plano) — nunca versionar
+/backups/
+
 # Artefactos de prueba manual / debug
 backend/.token_test
 

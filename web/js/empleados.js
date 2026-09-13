@@ -98,6 +98,10 @@ function limpiarFormulario() {
   document.getElementById("ayudaPassword").textContent = "";
   document.getElementById("password").required = true;
   document.getElementById("errorEmpleado").classList.add("d-none");
+  // No tiene sentido en "Nuevo empleado": el endpoint dedicado necesita un
+  // id existente. Nace en 0/false para todo empleado nuevo de todas formas.
+  document.getElementById("grupoAutorizacionGlobal").classList.add("d-none");
+  document.getElementById("estadoAutorizacionGlobal").classList.add("d-none");
 }
 
 function abrirModalNuevo() {
@@ -126,8 +130,47 @@ function abrirModalEditar(id, listaActual) {
   document.getElementById("ayudaPassword").textContent = "Dejar en blanco para no cambiarla.";
   document.getElementById("password").required = false;
 
+  document.getElementById("grupoAutorizacionGlobal").classList.remove("d-none");
+  document.getElementById("estadoAutorizacionGlobal").classList.add("d-none");
+  document.getElementById("autorizadoSi").checked = !!emp.autorizado_todas_bodegas;
+  document.getElementById("autorizadoNo").checked = !emp.autorizado_todas_bodegas;
+
   modal.show();
 }
+
+// Independiente del submit general del formulario: PUT /:id no maneja este
+// campo (a proposito, ver backend). Un solo listener fijo (no se re-crea
+// en cada abrirModalEditar) para no acumular handlers duplicados.
+document.querySelectorAll('input[name="autorizadoTodasBodegas"]').forEach((radio) => {
+  radio.addEventListener("change", async () => {
+    const id = document.getElementById("empleadoId").value;
+    if (!id) return; // por seguridad; el grupo esta oculto en "Nuevo empleado"
+
+    const estadoTexto = document.getElementById("estadoAutorizacionGlobal");
+    const autorizadoTodasBodegas = document.getElementById("autorizadoSi").checked;
+
+    estadoTexto.className = "small mt-1 text-muted";
+    estadoTexto.textContent = "Guardando...";
+    estadoTexto.classList.remove("d-none");
+
+    try {
+      await apiRequest(`/empleados/${id}/autorizacion-bodegas`, {
+        method: "PUT",
+        body: { autorizadoTodasBodegas },
+      });
+      estadoTexto.className = "small mt-1 text-success";
+      estadoTexto.textContent = "Guardado.";
+    } catch (err) {
+      // Revierte la seleccion visual al valor real si el backend rechazo el
+      // cambio (ej. sin permisos) — nunca se confia en lo que el usuario
+      // alcanzo a marcar en el radio si el guardado no se confirmo.
+      document.getElementById("autorizadoSi").checked = !autorizadoTodasBodegas;
+      document.getElementById("autorizadoNo").checked = autorizadoTodasBodegas;
+      estadoTexto.className = "small mt-1 text-danger";
+      estadoTexto.textContent = err.data?.error || "No se pudo guardar.";
+    }
+  });
+});
 
 async function eliminarEmpleado(id, nombre) {
   if (!confirm(`Desactivar a ${nombre}? Podra reactivarse editandolo despues.`)) return;
@@ -215,6 +258,10 @@ document.getElementById("btnSiguiente").addEventListener("click", () => {
 });
 
 (async function init() {
-  await cargarBodegasEnSelect();
+  try {
+    await cargarBodegasEnSelect();
+  } catch (err) {
+    console.error("No se pudieron cargar las geocercas para el formulario", err);
+  }
   cargarEmpleados();
 })();

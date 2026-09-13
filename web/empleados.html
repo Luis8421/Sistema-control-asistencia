@@ -130,6 +130,22 @@
               <label class="form-check-label small" for="activo">Activo</label>
             </div>
 
+            <!-- Independiente del resto del formulario a proposito: se
+                 guarda de inmediato contra PUT /:id/autorizacion-bodegas,
+                 nunca junto con el submit general (que no maneja este
+                 campo). Solo visible al editar un empleado existente. -->
+            <div class="mt-3 pt-3 border-top d-none" id="grupoAutorizacionGlobal">
+              <label class="form-label small d-block mb-1">Acceso a todas las bodegas</label>
+              <div class="btn-group" role="group" aria-label="Acceso a todas las bodegas">
+                <input type="radio" class="btn-check" name="autorizadoTodasBodegas" id="autorizadoSi" autocomplete="off" />
+                <label class="btn btn-outline-success btn-sm" for="autorizadoSi">Si</label>
+                <input type="radio" class="btn-check" name="autorizadoTodasBodegas" id="autorizadoNo" autocomplete="off" />
+                <label class="btn btn-outline-secondary btn-sm" for="autorizadoNo">No</label>
+              </div>
+              <div class="form-text">Se guarda de inmediato al elegir una opcion.</div>
+              <div class="small mt-1 d-none" id="estadoAutorizacionGlobal"></div>
+            </div>
+
             <div id="errorEmpleado" class="alert alert-danger py-2 small mt-2 d-none"></div>
           </div>
           <div class="modal-footer">

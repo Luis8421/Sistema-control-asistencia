@@ -303,7 +303,7 @@ function enTurno(req, res) {
        FROM registros_asistencia r
        JOIN empleados e ON e.id = r.empleado_id
        JOIN bodegas b ON b.id = r.bodega_id
-       WHERE date(r.timestamp_servidor) = date('now')
+       WHERE date(r.timestamp_servidor) = date('now', '-5 hours')
          AND r.valido = 1
        ORDER BY r.timestamp_servidor ASC`
     )

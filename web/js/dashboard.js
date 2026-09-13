@@ -41,9 +41,14 @@ async function cargarEnTurno() {
     const registros = await apiRequest("/asistencia/en-turno");
 
     if (registros.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted py-4">Nadie en turno en este momento</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">Nadie en turno en este momento</td></tr>`;
       return;
     }
+
+    // /asistencia/en-turno ya trae la fila completa (SELECT r.*, ...), asi
+    // que latitud/longitud/etc. ya estan disponibles sin pedir nada mas —
+    // se reutiliza el mismo modal que Marcaciones (js/ubicacion.js).
+    const porId = new Map(registros.map((r) => [r.id, r]));
 
     tbody.innerHTML = registros
       .map(
@@ -52,11 +57,19 @@ async function cargarEnTurno() {
         <td>${escapeHtml(r.nombre_completo)}</td>
         <td>${escapeHtml(r.bodega_nombre)}</td>
         <td>${formatHora(r.timestamp_servidor)}</td>
+        <td><button type="button" class="btn btn-outline-secondary btn-sm btn-ver-ubicacion" data-id="${r.id}">Ver ubicacion</button></td>
       </tr>`
       )
       .join("");
+
+    document.querySelectorAll(".btn-ver-ubicacion").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const registro = porId.get(btn.dataset.id);
+        if (registro) mostrarUbicacionMarcaje(registro);
+      })
+    );
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
   }
 }
 

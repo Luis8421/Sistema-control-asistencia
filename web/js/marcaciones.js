@@ -61,14 +61,15 @@ function construirQuery() {
 
 async function cargarMarcaciones() {
   const tbody = document.getElementById("tablaMarcaciones");
-  tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Cargando...</td></tr>`;
 
   try {
     const resp = await apiRequest(`/marcaciones?${construirQuery()}`);
     estado.totalPaginas = resp.totalPaginas;
+    estado.registrosPorId = new Map(resp.data.map((r) => [r.id, r]));
 
     if (resp.data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Sin resultados</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Sin resultados</td></tr>`;
     } else {
       tbody.innerHTML = resp.data
         .map(
@@ -87,9 +88,17 @@ async function cargarMarcaciones() {
             }
           </td>
           <td>${celdaFoto(r.foto_url)}</td>
+          <td><button type="button" class="btn btn-outline-secondary btn-sm btn-ver-ubicacion" data-id="${r.id}">Ver ubicacion</button></td>
         </tr>`
         )
         .join("");
+
+      document.querySelectorAll(".btn-ver-ubicacion").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const registro = estado.registrosPorId.get(btn.dataset.id);
+          if (registro) mostrarUbicacionMarcaje(registro);
+        })
+      );
     }
 
     document.getElementById("resumenPaginacion").textContent =
@@ -97,7 +106,7 @@ async function cargarMarcaciones() {
     document.getElementById("btnAnterior").disabled = resp.page <= 1;
     document.getElementById("btnSiguiente").disabled = resp.page >= resp.totalPaginas;
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
   }
 }
 

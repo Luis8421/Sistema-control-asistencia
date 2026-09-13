@@ -65,6 +65,20 @@
 
         <div id="resultadoMarcaje" class="alert mt-3 d-none"></div>
 
+        <!-- Panel de diagnostico de GPS: SOLO se muestra si la URL trae
+             ?diag=1 (ver marcaje.js). Para pruebas de campo, nunca visible
+             para un empleado que entra por el enlace normal. -->
+        <div id="panelDiagnostico" class="alert alert-secondary mt-2 d-none small" style="font-family: monospace; white-space: pre-wrap;"></div>
+
+        <!-- Solo visible para admin/supervisor (ver marcaje.js). El Portal de
+             Marcaje y el Panel Administrativo son dos sesiones separadas
+             (empleado_token vs panel_token) a proposito; este es solo un
+             enlace de conveniencia hacia login.html, no un acceso directo —
+             evita mezclar los dos mecanismos de sesion. Navega en la MISMA
+             pestana (sin target="_blank"): abrir pestana nueva desde una
+             pagina file:// puede bloquearse o comportarse de forma
+             inconsistente segun el navegador. -->
+        <a href="login.html" class="btn btn-link btn-sm mt-2 d-none" id="linkPanelAdmin">Ir al Panel Administrativo →</a>
         <button class="btn btn-link btn-sm mt-2 text-muted" id="btnLogout" type="button">Cerrar sesion</button>
       </div>
 

@@ -18,9 +18,8 @@ const loginLimiter = rateLimit({
 // entrada.
 router.post("/login", loginLimiter, login);
 
-// Ingreso simplificado del Portal de Marcaje: solo codigoEmpleado, sin
-// password (ver authController.loginEmpleado). Comparte el mismo limitador
-// que /login.
+// Portal de Marcaje: codigoEmpleado y PIN/password. Comparte el mismo
+// limitador que /login.
 router.post("/login-empleado", loginLimiter, loginEmpleado);
 
 module.exports = router;

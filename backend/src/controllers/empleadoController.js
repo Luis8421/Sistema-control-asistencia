@@ -67,41 +67,17 @@ async function listar(req, res) {
   return res.json({ data, page, limit, total: Number(total.total), totalPaginas: Math.ceil(Number(total.total) / limit) || 1 });
 }
 
-/**
- * GET /api/empleados/publico
- * Sin autenticacion (ver routes/empleados.js): alimenta el selector de
- * nombres del Portal de Marcaje. Devuelve solo empleados activos y los
- * campos nombre y codigo (no email, bodega, cargo ni password_hash).
- * Como el codigo es la unica credencial aceptada por ese portal, esta ruta
- * publica permite enumerar las cuentas y no autentica la identidad.
- */
-async function listarPublico(req, res) {
-  const data = await db
-    .prepare(
-      "SELECT codigo_empleado, nombre_completo FROM empleados WHERE rol = 'empleado' AND activo = 1 ORDER BY nombre_completo ASC"
-    )
-    .all();
-
-  return res.json(data.map((e) => ({ codigoEmpleado: e.codigo_empleado, nombreCompleto: e.nombre_completo })));
-}
-
-// Minimo aceptado para el password/PIN, SOLO si se decide asignar uno
-// (panel de administracion via login(), no el Portal de Marcaje). Un PIN
-// corto es deliberadamente conveniente, pero por debajo de esto es
-// trivial de adivinar.
+// Minimo aceptado para los PIN/contraseñas de empleados asignados por un
+// administrador.
 const PIN_LONGITUD_MINIMA = 4;
 
 /**
  * POST /api/empleados
- * body: { nombreCompleto, codigoEmpleado, bodegaId, email?, password?,
+ * body: { nombreCompleto, codigoEmpleado, bodegaId, password, email?,
  *         cargo, horaEntradaEsperada, horaSalidaEsperada, toleranciaMin,
  *         diasLaborables }
- * El rol siempre se crea como 'empleado'. El Portal de Marcaje ya NO usa
- * password (ver authController.loginEmpleado: entra solo con
- * codigoEmpleado) -- por eso password es opcional aqui. email tampoco es
- * obligatorio. Si no se manda password, se guarda un hash aleatorio
- * inutilizable (la columna sigue siendo NOT NULL, pero nada la compara
- * nunca para este flujo). diasLaborables es opcional (default
+ * El rol siempre se crea como 'empleado'. El administrador asigna el PIN
+ * requerido para iniciar sesion. email es opcional. diasLaborables es opcional (default
  * lunes-viernes): arreglo de numeros 1 (lunes) a 7 (domingo).
  */
 async function crear(req, res) {
@@ -118,13 +94,13 @@ async function crear(req, res) {
     diasLaborables,
   } = req.body;
 
-  if (!nombreCompleto || !codigoEmpleado || !bodegaId) {
+  if (!nombreCompleto || !codigoEmpleado || !bodegaId || typeof password !== "string" || !password) {
     return res.status(400).json({
-      error: "nombreCompleto, codigoEmpleado y bodegaId son requeridos",
+      error: "nombreCompleto, codigoEmpleado, password/PIN y bodegaId son requeridos",
     });
   }
 
-  if (password && password.length < PIN_LONGITUD_MINIMA) {
+  if (password.length < PIN_LONGITUD_MINIMA) {
     return res.status(400).json({ error: `El password/PIN debe tener al menos ${PIN_LONGITUD_MINIMA} caracteres` });
   }
 
@@ -155,11 +131,7 @@ async function crear(req, res) {
   }
 
   const id = uuidv4();
-  // password_hash es NOT NULL en el esquema, pero loginEmpleado() (Portal
-  // de Marcaje) nunca la compara -- si no se asigna un password/PIN
-  // explicito, se guarda un hash de un valor aleatorio que nadie conoce
-  // ni puede volver a generar, solo para satisfacer la columna.
-  const passwordHash = bcrypt.hashSync(password || uuidv4(), 10);
+  const passwordHash = bcrypt.hashSync(password, 10);
 
   await db.prepare(
     `INSERT INTO empleados
@@ -198,12 +170,9 @@ async function crear(req, res) {
 
 /**
  * PUT /api/empleados/:id
- * Edita datos del empleado. El password solo se actualiza si se envia.
+ * Edita datos del empleado. El password/PIN solo se actualiza si se envia.
  * El rol no es editable desde este endpoint. codigoEmpleado SI es editable
- * (a diferencia de antes): ahora es la credencial de entrada al Portal de
- * Marcaje (login-empleado, sin password), asi que el admin necesita poder
- * cambiar codigos feos autogenerados (ej. "EMP-CDADB39B") por algo que el
- * empleado pueda recordar.
+ * para que el administrador pueda corregir codigos autogenerados.
  */
 async function actualizar(req, res) {
   const { id } = req.params;
@@ -230,7 +199,7 @@ async function actualizar(req, res) {
     return res.status(400).json({ error: "codigoEmpleado no puede quedar vacio" });
   }
 
-  if (password && password.length < PIN_LONGITUD_MINIMA) {
+  if (password !== undefined && (typeof password !== "string" || (password && password.length < PIN_LONGITUD_MINIMA))) {
     return res.status(400).json({ error: `El password/PIN debe tener al menos ${PIN_LONGITUD_MINIMA} caracteres` });
   }
 
@@ -371,7 +340,6 @@ async function eliminar(req, res) {
 
 module.exports = {
   listar: asyncHandler(listar),
-  listarPublico: asyncHandler(listarPublico),
   crear: asyncHandler(crear),
   actualizar: asyncHandler(actualizar),
   actualizarAutorizacionBodegas: asyncHandler(actualizarAutorizacionBodegas),

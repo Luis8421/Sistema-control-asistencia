@@ -29,8 +29,8 @@ El servidor queda en `http://localhost:4000`.
 
 Tres formas de entrar, todas por `codigoEmpleado` ("usuario"), nunca por
 correo:
-- **Portal de Marcaje** (`marcaje.html`): elige tu nombre de una lista y
-  escribe tu código — **sin password** (`POST /auth/login-empleado`).
+- **Portal de Marcaje** (`marcaje.html`): escribe tu código y PIN/contraseña
+  (`POST /auth/login-empleado`).
 - **App móvil**: código + password (`POST /auth/login`).
 - **Panel de administración** (`login.html`, supervisor/admin): usuario
   (código) + password (mismo `POST /auth/login`).
@@ -54,8 +54,7 @@ una fuera de rango y otra por precisión GPS insuficiente) repartidas en
 ## Probar rápido con curl
 
 ```bash
-# 1. Login (empleado, por codigo — el panel admin/supervisor sigue
-# entrando por email, ver tabla de endpoints abajo)
+# 1. Login (empleado, supervisor o admin, por codigo)
 curl -X POST http://localhost:4000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"codigoEmpleado":"EMP-001","password":"demo1234"}'
@@ -73,8 +72,7 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | Método | Endpoint | Auth | Descripción |
 |---|---|---|---|
 | POST | `/api/auth/login` | - | Login con `password`: por `codigoEmpleado` (app móvil y panel supervisor/admin) o `email` como alternativa, devuelve JWT |
-| POST | `/api/auth/login-empleado` | - | Login del Portal: **solo `codigoEmpleado`, sin password**; solo `rol = 'empleado'`. Supervisor/admin usan `/login` con password. No hay autoregistro |
-| GET | `/api/empleados/publico` | - | Sin autenticación: `[{ codigoEmpleado, nombreCompleto }]` de empleados activos para el selector del Portal. El endpoint expone los códigos y, junto con el login sin password, no verifica la identidad del empleado |
+| POST | `/api/auth/login-empleado` | - | Login del Portal: `codigoEmpleado` y `password`/PIN; solo `rol = 'empleado'`. Supervisor/admin usan `/login`. No hay autoregistro |
 | POST | `/api/asistencia/marcar` | JWT | Valida geocerca (Haversine) contra las bodegas candidatas del empleado (`autorizado_todas_bodegas`: todas las activas, o solo su `bodega_id`), secuencia del día, y registra entrada/salida; `422` sin guardar nada si algo falla; `409` si el GPS coincide con 2+ bodegas candidatas a la vez (ver `bodegaId` abajo) |
 | GET | `/api/asistencia/historial/:empleadoId?fecha=` | JWT | Historial de un empleado; `fecha=YYYY-MM-DD` opcional (sin ella, trae todo) |
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
@@ -84,7 +82,7 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca (incluye `codigo`) |
 | DELETE | `/api/bodegas/:id` | JWT (supervisor/admin) | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
 | GET | `/api/empleados?page&limit&busqueda&activo` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado; `activo=true\|false` opcional |
-| POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado con `codigoEmpleado` — es como el admin lo autoriza a marcar (Portal: solo con el código, ver `/auth/login-empleado`). `email` y `password` son opcionales (el Portal ya no usa password; si se omite, se guarda un hash aleatorio inutilizable). `diasLaborables` opcional: arreglo 1-7, 1=lunes; default lunes-viernes |
+| POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado con `codigoEmpleado` y `password`/PIN asignado por el administrador. `email` es opcional. `diasLaborables` opcional: arreglo 1-7, 1=lunes; default lunes-viernes |
 | PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado (incluye `diasLaborables`, `bodegaId`). Nunca modifica `autorizado_todas_bodegas` |
 | PUT | `/api/empleados/:id/autorizacion-bodegas` | JWT (supervisor/admin) | `{ autorizadoTodasBodegas: true\|false }` — único endpoint que puede cambiar esta autorización; auditado con valor anterior/nuevo |
 | DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
@@ -406,11 +404,14 @@ de bodega; `test/sqlDialect.test.js` valida la traducción SQL a PostgreSQL.
 No sustituyen una prueba de integración contra un proyecto Supabase de
 prueba.
 
-**Bloqueadores antes de publicar:** `/api/auth/login-empleado` todavía
-acepta solo el código de empleado, y `/api/empleados/publico` enumera esos
-códigos; esto no verifica la identidad de una persona. Además, las fotos
-continúan en disco local. No publiques el portal con datos reales hasta
-resolver autenticación y almacenamiento privado.
+**Bloqueadores antes de publicar:** las cuentas existentes deben tener
+contraseñas/PIN válidos y las fotos continúan en disco local. Las cuentas
+migradas sin una contraseña conocida necesitan que un administrador les
+asigne un PIN desde el panel. Las sesiones antiguas de empleados se
+invalidan al habilitar este flujo y deberán iniciar sesión nuevamente con
+el PIN. No despliegues el portal con datos reales hasta resolver
+almacenamiento privado y terminar el traslado del backend a Supabase Edge
+Functions.
 
 ## Próximos pasos (Fase 2 en adelante)
 - Panel web de supervisión en tiempo real (usa `GET /api/asistencia/en-turno`

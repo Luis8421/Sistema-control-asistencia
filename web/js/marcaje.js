@@ -35,31 +35,6 @@ function reiniciarDiagnostico() {
   }
 }
 
-// Mapa nombreCompleto->codigoEmpleado, cargado desde /empleados/publico.
-// El selector muestra solo nombres, pero la respuesta de esta ruta publica
-// incluye los codigos y puede consultarse desde las herramientas del
-// navegador; el codigo no es una prueba de identidad.
-let empleadosPorNombre = new Map();
-
-async function cargarSelectorEmpleados() {
-  const select = document.getElementById("selectorEmpleado");
-  if (!select) return;
-
-  try {
-    const res = await fetch(`${API_URL}/empleados/publico`);
-    const empleados = await res.json();
-    empleados.forEach((e) => {
-      empleadosPorNombre.set(e.nombreCompleto, e.codigoEmpleado);
-      const opt = document.createElement("option");
-      opt.value = e.nombreCompleto;
-      opt.textContent = e.nombreCompleto;
-      select.appendChild(opt);
-    });
-  } catch (err) {
-    diag(`No se pudo cargar la lista de empleados: ${err.message}`);
-  }
-}
-
 // Sesion de empleado (JWT), separada de la sesion JWT del panel admin.
 function getToken() {
   return localStorage.getItem("empleado_token");
@@ -381,26 +356,15 @@ document.getElementById("formLogin").addEventListener("submit", async (e) => {
   btn.textContent = "Ingresando...";
 
   try {
-    const nombreSeleccionado = document.getElementById("selectorEmpleado").value;
     const codigoEscrito = document.getElementById("codigoEmpleado").value.trim();
-
-    if (!nombreSeleccionado) {
-      throw { data: { error: "Selecciona tu nombre de la lista." } };
-    }
-
-    // Verificacion debil a proposito (ver comentario en marcaje.html): el
-    // codigo no es secreto, esto solo evita errores de tipeo/seleccion
-    // antes de llamar al backend, que es quien de verdad decide si el
-    // codigo existe y esta activo.
-    if (empleadosPorNombre.get(nombreSeleccionado) !== codigoEscrito) {
-      throw { data: { error: "El codigo no coincide con el nombre seleccionado." } };
-    }
+    const password = document.getElementById("passwordEmpleado").value;
 
     const data = await apiRequest("/auth/login-empleado", {
       method: "POST",
-      body: { codigoEmpleado: codigoEscrito },
+      body: { codigoEmpleado: codigoEscrito, password },
     });
     setSesion(data.token, data.empleado);
+    document.getElementById("passwordEmpleado").value = "";
     mostrarBloqueMarcaje();
   } catch (err) {
     errorBox.textContent = err.data?.error || "No se pudo iniciar sesion.";
@@ -658,10 +622,6 @@ async function cargarHistorial() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
   }
 }
-
-// Se carga siempre (no solo si falta sesion): si mas tarde cierra sesion
-// desde la pantalla de marcaje, el <select> del login ya debe estar listo.
-cargarSelectorEmpleados();
 
 // Si ya hay una sesion guardada de una visita anterior, saltar directo al marcaje.
 if (getToken() && getEmpleado()) {

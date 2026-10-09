@@ -25,7 +25,7 @@ const JWT_EXPIRES_IN_EMPLEADO = process.env.JWT_EXPIRES_IN_EMPLEADO || "180d";
 async function login(req, res) {
   const { codigoEmpleado, email, password } = req.body;
 
-  if ((!codigoEmpleado && !email) || !password) {
+  if ((!codigoEmpleado && !email) || typeof password !== "string" || !password) {
     return res.status(400).json({ error: "codigoEmpleado (o email) y password son requeridos" });
   }
 
@@ -48,20 +48,15 @@ async function login(req, res) {
 
 /**
  * POST /api/auth/login-empleado
- * body: { codigoEmpleado }
- * Ingreso SIN password para el Portal de Marcaje. Es una decision
- * explicita de simplificar el acceso a costa de ya no verificar identidad
- * de forma fuerte: GET /empleados/publico expone los codigos activos y
- * cualquier persona que los conozca puede iniciar sesion como ese empleado.
- * NUNCA se usa para
- * supervisor/admin (esos siguen exigiendo password en login(), arriba,
- * para el panel administrativo) -- por eso el filtro rol = 'empleado'.
+ * body: { codigoEmpleado, password }
+ * Portal de marcaje: empleados autentican con codigo y PIN/password. Este
+ * endpoint se limita al rol empleado; supervisor/admin usan /login.
  */
 async function loginEmpleado(req, res) {
-  const { codigoEmpleado } = req.body;
+  const { codigoEmpleado, password } = req.body;
 
-  if (!codigoEmpleado) {
-    return res.status(400).json({ error: "codigoEmpleado es requerido" });
+  if (!codigoEmpleado || typeof password !== "string" || !password) {
+    return res.status(400).json({ error: "codigoEmpleado y password son requeridos" });
   }
 
   const empleado = await db
@@ -69,7 +64,12 @@ async function loginEmpleado(req, res) {
     .get(codigoEmpleado);
 
   if (!empleado || !empleado.activo) {
-    return res.status(401).json({ error: "Codigo no encontrado o inactivo" });
+    return res.status(401).json({ error: "Credenciales invalidas" });
+  }
+
+  const passwordValido = await bcrypt.compare(password, empleado.password_hash);
+  if (!passwordValido) {
+    return res.status(401).json({ error: "Credenciales invalidas" });
   }
 
   return res.json(await construirRespuestaLogin(empleado));
@@ -79,7 +79,7 @@ async function construirRespuestaLogin(empleado) {
   const expiresIn = empleado.rol === "empleado" ? JWT_EXPIRES_IN_EMPLEADO : JWT_EXPIRES_IN;
 
   const token = jwt.sign(
-    { id: empleado.id, codigoEmpleado: empleado.codigo_empleado, email: empleado.email, rol: empleado.rol },
+    { id: empleado.id, codigoEmpleado: empleado.codigo_empleado, email: empleado.email, rol: empleado.rol, authVersion: 2 },
     process.env.JWT_SECRET,
     { expiresIn }
   );

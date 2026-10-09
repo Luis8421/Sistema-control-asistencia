@@ -11,6 +11,9 @@ function requiereAutenticacion(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.rol === "empleado" && payload.authVersion !== 2) {
+      return res.status(401).json({ error: "Sesion expirada; inicia sesion con tu codigo y PIN" });
+    }
     req.usuario = payload; // { id, email, rol }
     next();
   } catch (err) {

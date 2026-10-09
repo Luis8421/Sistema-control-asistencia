@@ -31,8 +31,8 @@ el detalle completo.
    datos de ejemplo, corre `npm run dev`, corre `npm test`).
 2. Abre `web/marcaje.html` (Portal de Asistencia) o sigue `mobile/README.md`
    para correr la app en tu celular con Expo Go.
-3. En el Portal, selecciona el empleado e ingresa `EMP-001` (el portal no
-   pide contraseña); en la app móvil usa `EMP-001` / `demo1234`. Prueba
+3. En el Portal y en la app móvil, ingresa el código y PIN/contraseña
+   asignados al empleado (en los datos de ejemplo: `EMP-001` / `demo1234`). Prueba
    "Marcar Entrada".
 4. Para el panel de administración, abre `web/login.html` e inicia sesión
    con `ADM-001` / `demo1234`.

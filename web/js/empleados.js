@@ -93,6 +93,9 @@ function limpiarFormulario() {
   document.getElementById("formEmpleado").reset();
   document.getElementById("empleadoId").value = "";
   document.getElementById("codigoEmpleado").disabled = false;
+  document.getElementById("passwordEmpleado").required = true;
+  document.getElementById("ayudaPasswordEmpleado").textContent =
+    "El administrador asigna el PIN que el empleado usara para iniciar sesion.";
   document.getElementById("grupoActivo").classList.add("d-none");
   document.getElementById("errorEmpleado").classList.add("d-none");
   // No tiene sentido en "Nuevo empleado": el endpoint dedicado necesita un
@@ -117,6 +120,9 @@ function abrirModalEditar(id, listaActual) {
   document.getElementById("nombreCompleto").value = emp.nombre_completo;
   document.getElementById("codigoEmpleado").value = emp.codigo_empleado;
   document.getElementById("email").value = emp.email || "";
+  document.getElementById("passwordEmpleado").required = false;
+  document.getElementById("ayudaPasswordEmpleado").textContent =
+    "Deja este campo vacio para conservar el PIN actual. Si lo completas, lo restableceras.";
   document.getElementById("cargo").value = emp.cargo || "";
   document.getElementById("bodegaId").value = emp.bodega_id;
   pintarDiasLaborables(emp.dias_laborables);
@@ -201,6 +207,8 @@ document.getElementById("formEmpleado").addEventListener("submit", async (e) => 
     bodegaId: document.getElementById("bodegaId").value,
     diasLaborables,
   };
+  const password = document.getElementById("passwordEmpleado").value;
+  if (password) payload.password = password;
 
   if (id) {
     payload.activo = document.getElementById("activo").checked;

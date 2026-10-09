@@ -38,13 +38,13 @@ permisos).
 
 `marcaje.html` es el **portal oficial de marcaje para todo el personal**:
 un solo enlace (`https://tu-dominio/marcaje.html`), sin enlaces
-individuales por empleado. Usa `POST /api/auth/login-empleado` (solo
-código, sin contraseña) y comparte la validación de geocerca del backend
-con la app móvil. El login simplificado no verifica sólidamente la
-identidad: la lista pública que alimenta el selector también entrega los
-códigos de empleado. Para datos reales, se recomienda requerir un PIN o
-contraseña. El chequeo local de distancia es solo una optimización de UX,
-nunca autoritativo.
+individuales por empleado. Usa `POST /api/auth/login-empleado` con código
+y PIN/contraseña, y comparte la validación de geocerca del backend con la
+app móvil. Los códigos de empleado ya no se exponen en una lista pública.
+El administrador asigna el PIN al crear al empleado y puede restablecerlo
+desde el panel; al editar, dejar el campo vacío conserva el PIN existente.
+El chequeo local de distancia es solo una optimización de UX, nunca
+autoritativo.
 
 El JWT se guarda en `localStorage` bajo claves separadas
 (`empleado_token` / `empleado_data`) para no chocar con la sesión del
@@ -100,11 +100,11 @@ Notas ya conocidas de la plataforma web (no cambian con esta mejora):
 En desarrollo local servido por Apache/WAMP (`localhost`), las páginas
 conectan directamente con `http://localhost:4000/api`. En despliegues
 detrás de Caddy usan `/api` en el mismo origen. Si tu backend local usa
-otro host o puerto, configura `ASISTENCIA_API_URL` en `js/config.js`. Para
-GitHub Pages y un backend alojado por separado, pon ahí la URL pública de
-Express terminada en `/api` y agrega el origen exacto de GitHub Pages a
-`CORS_ORIGIN` del backend. Esa URL no es un secreto; no pongas en el archivo
-una clave de base de datos ni claves administrativas de Supabase.
+otro host o puerto, configura `ASISTENCIA_API_URL` en `js/config.js`. La
+adaptación a Supabase Edge Functions y GitHub Pages todavía requiere
+implementar y desplegar la API; GitHub Pages por sí solo no ejecuta Express.
+Esa URL no es un secreto; no pongas en el archivo una clave de base de datos
+ni claves administrativas de Supabase.
 
 ## Estructura
 

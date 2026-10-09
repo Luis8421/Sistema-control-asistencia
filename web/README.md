@@ -4,9 +4,10 @@ Panel de administración en HTML + CSS + JavaScript plano (sin build ni
 frameworks), con Bootstrap 5 vía CDN. Consume la API del `backend/`
 directamente desde el navegador (`fetch`).
 
-**Login real con JWT** (`login.html`), igual que la app móvil: el
-administrador o supervisor ingresa su email/contraseña contra
-`POST /api/auth/login`, y el token resultante se envía como
+**Login real con JWT** (`login.html`): el administrador o supervisor
+ingresa su código de empleado y contraseña contra `POST /api/auth/login`
+(los empleados usan el Portal de Marcaje o la app móvil — ver
+`backend/README.md`), y el token resultante se envía como
 `Authorization: Bearer <token>` en cada petición (ver `js/api.js`). Solo
 cuentas con rol `supervisor` o `admin` pueden entrar — el backend rechaza
 con `403` a cualquier otro rol, y el login del panel también lo valida del
@@ -37,17 +38,19 @@ permisos).
 
 `marcaje.html` es el **portal oficial de marcaje para todo el personal**:
 un solo enlace (`https://tu-dominio/marcaje.html`), sin enlaces
-individuales por empleado. Reutiliza exactamente la misma autenticación
-(`POST /api/auth/login`) y la misma validación de geocerca del backend
-que la app móvil — no hay una segunda implementación de ninguna de las
-dos cosas, solo un chequeo local de distancia como optimización de UX
-(nunca autoritativo).
+individuales por empleado. Usa `POST /api/auth/login-empleado` (solo
+código, sin contraseña) y comparte la validación de geocerca del backend
+con la app móvil. El login simplificado no verifica sólidamente la
+identidad: la lista pública que alimenta el selector también entrega los
+códigos de empleado. Para datos reales, se recomienda requerir un PIN o
+contraseña. El chequeo local de distancia es solo una optimización de UX,
+nunca autoritativo.
 
 El JWT se guarda en `localStorage` bajo claves separadas
 (`empleado_token` / `empleado_data`) para no chocar con la sesión del
-panel admin, y la sesión dura lo que dure el token — configurable en
-`backend/.env` con `JWT_EXPIRES_IN` (default `12h`, mismo valor para app
-móvil, portal y panel).
+panel admin. La vigencia por defecto es de `180d` para empleados y `12h`
+para supervisor/admin; se configura con `JWT_EXPIRES_IN_EMPLEADO` y
+`JWT_EXPIRES_IN` en `backend/.env`.
 
 Tras iniciar sesión, el empleado ve **únicamente lo suyo**: nombre,
 cargo, bodega asignada, fecha/hora en vivo, estado del turno ("en turno
@@ -73,6 +76,14 @@ Notas ya conocidas de la plataforma web (no cambian con esta mejora):
 - Requiere **HTTPS** para funcionar fuera de `localhost` — los
   navegadores bloquean `navigator.geolocation` en orígenes HTTP que no
   sean `localhost`. También lo exige la instalación de un service worker.
+- El Portal busca la mejor lectura durante hasta **30 segundos** y exige
+  precisión GPS reportada de **50 m o menos**. Es un umbral de precisión,
+  no el radio de la bodega: por ejemplo, la bodega asignada a Milton Cajas
+  tiene un radio de **20 m**. La laptop suele estimar ubicación por Wi-Fi/IP
+  y puede no alcanzar la precisión necesaria; para marcajes reales conviene
+  usar un celular con ubicación precisa activada, idealmente al aire libre.
+  No aumentes el radio ni relajes el umbral sin confirmar las coordenadas
+  y probar varias lecturas en sitio.
 - No puede detectar "ubicación simulada" (mock location) como sí hace la
   app móvil — limitación de la API de geolocalización del navegador. El
   backend igual valida `precisionM` y rechaza GPS poco confiable.
@@ -86,8 +97,14 @@ Notas ya conocidas de la plataforma web (no cambian con esta mejora):
    `http://localhost/proyecto-asistencia/web/`) e inicia sesión con esa
    cuenta (o cualquier cuenta `supervisor`/`admin`).
 
-Si tu backend no corre en `http://localhost:4000`, cambia `API_URL` en
-`js/api.js` también.
+En desarrollo local servido por Apache/WAMP (`localhost`), las páginas
+conectan directamente con `http://localhost:4000/api`. En despliegues
+detrás de Caddy usan `/api` en el mismo origen. Si tu backend local usa
+otro host o puerto, configura `ASISTENCIA_API_URL` en `js/config.js`. Para
+GitHub Pages y un backend alojado por separado, pon ahí la URL pública de
+Express terminada en `/api` y agrega el origen exacto de GitHub Pages a
+`CORS_ORIGIN` del backend. Esa URL no es un secreto; no pongas en el archivo
+una clave de base de datos ni claves administrativas de Supabase.
 
 ## Estructura
 

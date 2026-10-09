@@ -1,6 +1,7 @@
 const db = require("../db/connection");
 const { calcularIndicadores } = require("../utils/indicadores");
 const { generarPdfIndicadores } = require("../utils/pdfExport");
+const asyncHandler = require("../utils/asyncHandler");
 
 const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const RANGO_MAX_DIAS = 366;
@@ -11,7 +12,7 @@ const RANGO_MAX_DIAS = 366;
  * duplicar la logica. Lanza { status, error } (no una Error normal) para
  * que el controlador que llama solo tenga que mapearlo a res.status().json().
  */
-function resolverIndicadores(req) {
+async function resolverIndicadores(req) {
   const { empleadoId } = req.params;
 
   const esPropio = req.usuario.id === empleadoId;
@@ -20,12 +21,12 @@ function resolverIndicadores(req) {
     throw { status: 403, error: "No autorizado a ver estos indicadores" };
   }
 
-  const empleado = db.prepare("SELECT * FROM empleados WHERE id = ?").get(empleadoId);
+  const empleado = await db.prepare("SELECT * FROM empleados WHERE id = ?").get(empleadoId);
   if (!empleado) {
     throw { status: 404, error: "Empleado no encontrado" };
   }
 
-  const hoy = db.prepare("SELECT date('now', '-5 hours') AS hoy").get().hoy;
+  const { hoy } = await db.prepare("SELECT date('now', '-5 hours') AS hoy").get();
   const fechaInicio = req.query.desde || `${hoy.slice(0, 7)}-01`;
   const fechaFin = req.query.hasta || hoy;
 
@@ -43,7 +44,7 @@ function resolverIndicadores(req) {
     throw { status: 400, error: `El rango maximo es de ${RANGO_MAX_DIAS} dias` };
   }
 
-  const registros = db
+  const registros = await db
     .prepare(
       `SELECT tipo, timestamp_servidor, valido FROM registros_asistencia
        WHERE empleado_id = ? AND date(timestamp_servidor) BETWEEN date(?) AND date(?)
@@ -78,9 +79,9 @@ function resolverIndicadores(req) {
  * empleado solo puede ver los suyos, supervisor/admin pueden ver cualquiera.
  * Por defecto (sin desde/hasta) calcula el mes en curso.
  */
-function obtenerIndicadores(req, res) {
+async function obtenerIndicadores(req, res) {
   try {
-    return res.json(resolverIndicadores(req));
+    return res.json(await resolverIndicadores(req));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.error });
     throw err;
@@ -91,9 +92,9 @@ function obtenerIndicadores(req, res) {
  * GET /api/indicadores/:empleadoId/exportar?desde&hasta
  * Mismo calculo que el endpoint JSON, servido como PDF descargable.
  */
-function exportarPdf(req, res) {
+async function exportarPdf(req, res) {
   try {
-    const data = resolverIndicadores(req);
+    const data = await resolverIndicadores(req);
     generarPdfIndicadores(data, res);
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.error });
@@ -101,4 +102,7 @@ function exportarPdf(req, res) {
   }
 }
 
-module.exports = { obtenerIndicadores, exportarPdf };
+module.exports = {
+  obtenerIndicadores: asyncHandler(obtenerIndicadores),
+  exportarPdf: asyncHandler(exportarPdf),
+};

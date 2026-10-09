@@ -18,9 +18,9 @@ const insertar = db.prepare(
  * @param {string} params.entidadId
  * @param {object} [params.detalle] - campos afectados; nunca incluir contrasenas
  */
-function registrarAuditoria({ usuario, accion, entidad, entidadId, detalle }) {
+async function registrarAuditoria({ usuario, accion, entidad, entidadId, detalle }) {
   try {
-    insertar.run(
+    await insertar.run(
       uuidv4(),
       usuario.id,
       usuario.email,

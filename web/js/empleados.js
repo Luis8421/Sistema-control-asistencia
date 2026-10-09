@@ -49,7 +49,7 @@ async function cargarEmpleados() {
         <tr>
           <td>${escapeHtml(emp.codigo_empleado)}</td>
           <td>${escapeHtml(emp.nombre_completo)}</td>
-          <td>${escapeHtml(emp.email)}</td>
+          <td>${escapeHtml(emp.email || "-")}</td>
           <td>${escapeHtml(emp.cargo || "-")}</td>
           <td>${escapeHtml(nombreBodega(emp.bodega_id))}</td>
           <td>${emp.activo ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
@@ -94,9 +94,6 @@ function limpiarFormulario() {
   document.getElementById("empleadoId").value = "";
   document.getElementById("codigoEmpleado").disabled = false;
   document.getElementById("grupoActivo").classList.add("d-none");
-  document.getElementById("labelPassword").textContent = "Contrasena";
-  document.getElementById("ayudaPassword").textContent = "";
-  document.getElementById("password").required = true;
   document.getElementById("errorEmpleado").classList.add("d-none");
   // No tiene sentido en "Nuevo empleado": el endpoint dedicado necesita un
   // id existente. Nace en 0/false para todo empleado nuevo de todas formas.
@@ -119,16 +116,12 @@ function abrirModalEditar(id, listaActual) {
   document.getElementById("empleadoId").value = emp.id;
   document.getElementById("nombreCompleto").value = emp.nombre_completo;
   document.getElementById("codigoEmpleado").value = emp.codigo_empleado;
-  document.getElementById("codigoEmpleado").disabled = true;
-  document.getElementById("email").value = emp.email;
+  document.getElementById("email").value = emp.email || "";
   document.getElementById("cargo").value = emp.cargo || "";
   document.getElementById("bodegaId").value = emp.bodega_id;
   pintarDiasLaborables(emp.dias_laborables);
   document.getElementById("activo").checked = !!emp.activo;
   document.getElementById("grupoActivo").classList.remove("d-none");
-  document.getElementById("labelPassword").textContent = "Nueva contrasena";
-  document.getElementById("ayudaPassword").textContent = "Dejar en blanco para no cambiarla.";
-  document.getElementById("password").required = false;
 
   document.getElementById("grupoAutorizacionGlobal").classList.remove("d-none");
   document.getElementById("estadoAutorizacionGlobal").classList.add("d-none");
@@ -190,7 +183,6 @@ document.getElementById("formEmpleado").addEventListener("submit", async (e) => 
   errorBox.classList.add("d-none");
 
   const id = document.getElementById("empleadoId").value;
-  const password = document.getElementById("password").value;
 
   const diasLaborables = leerDiasLaborables();
   if (diasLaborables.length === 0) {
@@ -201,18 +193,17 @@ document.getElementById("formEmpleado").addEventListener("submit", async (e) => 
 
   const payload = {
     nombreCompleto: document.getElementById("nombreCompleto").value.trim(),
-    email: document.getElementById("email").value.trim(),
+    codigoEmpleado: document.getElementById("codigoEmpleado").value.trim(),
+    // Vacio -> null explicito (no ""), para no chocar con el indice UNICO
+    // de email si otro empleado tambien lo deja en blanco.
+    email: document.getElementById("email").value.trim() || null,
     cargo: document.getElementById("cargo").value.trim() || null,
     bodegaId: document.getElementById("bodegaId").value,
     diasLaborables,
   };
 
-  if (!id) {
-    payload.codigoEmpleado = document.getElementById("codigoEmpleado").value.trim();
-    payload.password = password;
-  } else {
+  if (id) {
     payload.activo = document.getElementById("activo").checked;
-    if (password) payload.password = password;
   }
 
   try {

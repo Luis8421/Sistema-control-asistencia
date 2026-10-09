@@ -1,6 +1,11 @@
 // Standalone a proposito: no depende de js/api.js (que redirige aqui mismo
 // si no hay sesion), para evitar un bucle de redireccion en esta pagina.
-const API_URL = location.protocol === "file:" ? "http://localhost:4000/api" : "/api";
+const apiUrlConfigurada = window.ASISTENCIA_API_URL && window.ASISTENCIA_API_URL.trim();
+const API_URL = apiUrlConfigurada
+  ? apiUrlConfigurada.replace(/\/+$/, "")
+  : location.protocol === "file:" || location.hostname === "localhost"
+    ? "http://localhost:4000/api"
+    : "/api";
 
 function setSesionPanel(token, usuario) {
   localStorage.setItem("panel_token", token);
@@ -26,13 +31,13 @@ document.getElementById("formLogin").addEventListener("submit", async (e) => {
   btn.textContent = "Ingresando...";
 
   try {
-    const email = document.getElementById("email").value.trim();
+    const codigoEmpleado = document.getElementById("usuario").value.trim();
     const password = document.getElementById("password").value;
 
     const res = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ codigoEmpleado, password }),
     });
     const data = await res.json().catch(() => ({}));
 

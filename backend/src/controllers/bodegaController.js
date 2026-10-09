@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const db = require("../db/connection");
 const { registrarAuditoria } = require("../utils/auditoria");
+const asyncHandler = require("../utils/asyncHandler");
 
 /**
  * Normaliza el codigo de bodega antes de guardar: sin espacios al
@@ -20,11 +21,11 @@ function normalizarCodigo(codigo) {
  * contra si misma; tambien evita que la busqueda pueda tocar o
  * confundirse con el codigo de otra bodega — es de solo lectura.
  */
-function verificarCodigoDisponible(codigo, idPropio) {
+async function verificarCodigoDisponible(codigo, idPropio) {
   if (codigo === null) return null;
   const enUso = idPropio
-    ? db.prepare("SELECT id FROM bodegas WHERE codigo = ? AND id != ?").get(codigo, idPropio)
-    : db.prepare("SELECT id FROM bodegas WHERE codigo = ?").get(codigo);
+    ? await db.prepare("SELECT id FROM bodegas WHERE codigo = ? AND id != ?").get(codigo, idPropio)
+    : await db.prepare("SELECT id FROM bodegas WHERE codigo = ?").get(codigo);
   return enUso ? `Ya existe otra bodega con el código "${codigo}"` : null;
 }
 
@@ -34,15 +35,15 @@ function verificarCodigoDisponible(codigo, idPropio) {
  * administracion de geocercas pide incluirInactivas=true para poder
  * reactivarlas.
  */
-function listar(req, res) {
+async function listar(req, res) {
   const incluirInactivas = req.query.incluirInactivas === "true";
   const bodegas = incluirInactivas
-    ? db.prepare("SELECT * FROM bodegas ORDER BY nombre ASC").all()
-    : db.prepare("SELECT * FROM bodegas WHERE activo = 1 ORDER BY nombre ASC").all();
+    ? await db.prepare("SELECT * FROM bodegas ORDER BY nombre ASC").all()
+    : await db.prepare("SELECT * FROM bodegas WHERE activo = 1 ORDER BY nombre ASC").all();
   return res.json(bodegas);
 }
 
-function crear(req, res) {
+async function crear(req, res) {
   const { nombre, direccion, latitud, longitud, radioMetros } = req.body;
 
   if (!nombre || typeof latitud !== "number" || typeof longitud !== "number") {
@@ -57,21 +58,21 @@ function crear(req, res) {
   }
 
   const codigo = normalizarCodigo(req.body.codigo);
-  const errorCodigo = verificarCodigoDisponible(codigo, null);
+  const errorCodigo = await verificarCodigoDisponible(codigo, null);
   if (errorCodigo) {
     return res.status(409).json({ error: errorCodigo });
   }
 
   const id = uuidv4();
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO bodegas (id, nombre, direccion, latitud, longitud, radio_metros, codigo)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(id, nombre, direccion ?? null, latitud, longitud, radioMetros ?? 100, codigo);
 
-  const bodega = db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
+  const bodega = await db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
 
-  registrarAuditoria({
+  await registrarAuditoria({
     usuario: req.usuario,
     accion: "crear",
     entidad: "bodega",
@@ -86,9 +87,9 @@ function crear(req, res) {
  * PUT /api/bodegas/:id
  * Edita una geocerca (nombre, direccion, coordenadas, radio, activo).
  */
-function actualizar(req, res) {
+async function actualizar(req, res) {
   const { id } = req.params;
-  const existente = db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
+  const existente = await db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
   if (!existente) {
     return res.status(404).json({ error: "Geocerca no encontrada" });
   }
@@ -111,12 +112,12 @@ function actualizar(req, res) {
   // Solo se toca el codigo si vino en el body (mismo criterio que el
   // resto de los campos); si no vino, se conserva el existente tal cual.
   const codigo = req.body.codigo !== undefined ? normalizarCodigo(req.body.codigo) : existente.codigo;
-  const errorCodigo = verificarCodigoDisponible(codigo, id);
+  const errorCodigo = await verificarCodigoDisponible(codigo, id);
   if (errorCodigo) {
     return res.status(409).json({ error: errorCodigo });
   }
 
-  db.prepare(
+  await db.prepare(
     `UPDATE bodegas SET nombre = ?, direccion = ?, latitud = ?, longitud = ?, radio_metros = ?, codigo = ?, activo = ?
      WHERE id = ?`
   ).run(
@@ -126,13 +127,13 @@ function actualizar(req, res) {
     longitud ?? existente.longitud,
     radioMetros ?? existente.radio_metros,
     codigo,
-    activo !== undefined ? (activo ? 1 : 0) : existente.activo,
+    activo !== undefined ? activo : existente.activo,
     id
   );
 
-  const actualizada = db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
+  const actualizada = await db.prepare("SELECT * FROM bodegas WHERE id = ?").get(id);
 
-  registrarAuditoria({
+  await registrarAuditoria({
     usuario: req.usuario,
     accion: "actualizar",
     entidad: "bodega",
@@ -149,30 +150,30 @@ function actualizar(req, res) {
  * (por las foreign keys); si las tiene, se sugiere desactivarla en vez de
  * borrarla (PUT con activo=false).
  */
-function eliminar(req, res) {
+async function eliminar(req, res) {
   const { id } = req.params;
-  const existente = db.prepare("SELECT id FROM bodegas WHERE id = ?").get(id);
+  const existente = await db.prepare("SELECT id FROM bodegas WHERE id = ?").get(id);
   if (!existente) {
     return res.status(404).json({ error: "Geocerca no encontrada" });
   }
 
-  const empleadosAsignados = db
+  const empleadosAsignados = await db
     .prepare("SELECT COUNT(*) AS total FROM empleados WHERE bodega_id = ?")
-    .get(id).total;
-  const registrosAsociados = db
+    .get(id);
+  const registrosAsociados = await db
     .prepare("SELECT COUNT(*) AS total FROM registros_asistencia WHERE bodega_id = ?")
-    .get(id).total;
+    .get(id);
 
-  if (empleadosAsignados > 0 || registrosAsociados > 0) {
+  if (Number(empleadosAsignados.total) > 0 || Number(registrosAsociados.total) > 0) {
     return res.status(409).json({
       error:
         "No se puede eliminar: la geocerca tiene empleados o marcaciones asociadas. Desactivala en su lugar.",
     });
   }
 
-  db.prepare("DELETE FROM bodegas WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM bodegas WHERE id = ?").run(id);
 
-  registrarAuditoria({
+  await registrarAuditoria({
     usuario: req.usuario,
     accion: "eliminar",
     entidad: "bodega",
@@ -182,4 +183,9 @@ function eliminar(req, res) {
   return res.status(204).send();
 }
 
-module.exports = { listar, crear, actualizar, eliminar };
+module.exports = {
+  listar: asyncHandler(listar),
+  crear: asyncHandler(crear),
+  actualizar: asyncHandler(actualizar),
+  eliminar: asyncHandler(eliminar),
+};

@@ -8,6 +8,9 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "migrate": "node src/db/migrate.js",
+    "migrate:postgres": "node src/db/migratePostgres.js",
+    "migrate:data": "node src/db/migrateData.js",
+    "sqlite:copy": "node src/db/copySqlite.js",
     "seed": "node src/seed.js",
     "backup": "node src/backup.js",
     "import-empleados": "node src/importEmpleados.js",
@@ -25,6 +28,7 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "pdfkit": "^0.19.1",
+    "pg": "^8.23.1",
     "uuid": "^14.0.1"
   },
   "devDependencies": {

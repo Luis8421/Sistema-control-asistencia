@@ -27,12 +27,20 @@ El servidor queda en `http://localhost:4000`.
 
 ## Usuarios de prueba (creados por `npm run seed`)
 
-| Rol        | Email                      | Password   |
-|------------|-----------------------------|------------|
-| Empleado   | juan.perez@empresa.com      | demo1234   |
-| Empleado   | ana.martinez@empresa.com    | demo1234   |
-| Supervisor | maria.torres@empresa.com    | demo1234   |
-| Admin      | admin@empresa.com           | demo1234   |
+Tres formas de entrar, todas por `codigoEmpleado` ("usuario"), nunca por
+correo:
+- **Portal de Marcaje** (`marcaje.html`): elige tu nombre de una lista y
+  escribe tu código — **sin password** (`POST /auth/login-empleado`).
+- **App móvil**: código + password (`POST /auth/login`).
+- **Panel de administración** (`login.html`, supervisor/admin): usuario
+  (código) + password (mismo `POST /auth/login`).
+
+| Rol        | Codigo de empleado | Email                      | Password   |
+|------------|---------------------|-----------------------------|------------|
+| Empleado   | EMP-001             | juan.perez@empresa.com      | demo1234   |
+| Empleado   | EMP-002             | ana.martinez@empresa.com    | demo1234   |
+| Supervisor | SUP-001             | maria.torres@empresa.com    | demo1234   |
+| Admin      | ADM-001             | admin@empresa.com           | demo1234   |
 
 La geocerca de ejemplo ("Oficina Principal", lat -0.1807, lng -78.4678,
 radio 100m) se crea con coordenadas fijas en `src/seed.js`. **Cámbialas por
@@ -46,10 +54,11 @@ una fuera de rango y otra por precisión GPS insuficiente) repartidas en
 ## Probar rápido con curl
 
 ```bash
-# 1. Login
+# 1. Login (empleado, por codigo — el panel admin/supervisor sigue
+# entrando por email, ver tabla de endpoints abajo)
 curl -X POST http://localhost:4000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"juan.perez@empresa.com","password":"demo1234"}'
+  -d '{"codigoEmpleado":"EMP-001","password":"demo1234"}'
 # copia el "token" de la respuesta
 
 # 2. Marcar entrada (reemplaza TOKEN, y usa lat/lon cercanas a la bodega)
@@ -63,8 +72,9 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 
 | Método | Endpoint | Auth | Descripción |
 |---|---|---|---|
-| POST | `/api/auth/login` | - | Login de empleado/supervisor, devuelve JWT |
-| POST | `/api/auth/registro` | - | Autoregistro (nombreCompleto, email, password) con rol `empleado`, devuelve JWT |
+| POST | `/api/auth/login` | - | Login con `password`: por `codigoEmpleado` (app móvil y panel supervisor/admin) o `email` como alternativa, devuelve JWT |
+| POST | `/api/auth/login-empleado` | - | Login del Portal: **solo `codigoEmpleado`, sin password**; solo `rol = 'empleado'`. Supervisor/admin usan `/login` con password. No hay autoregistro |
+| GET | `/api/empleados/publico` | - | Sin autenticación: `[{ codigoEmpleado, nombreCompleto }]` de empleados activos para el selector del Portal. El endpoint expone los códigos y, junto con el login sin password, no verifica la identidad del empleado |
 | POST | `/api/asistencia/marcar` | JWT | Valida geocerca (Haversine) contra las bodegas candidatas del empleado (`autorizado_todas_bodegas`: todas las activas, o solo su `bodega_id`), secuencia del día, y registra entrada/salida; `422` sin guardar nada si algo falla; `409` si el GPS coincide con 2+ bodegas candidatas a la vez (ver `bodegaId` abajo) |
 | GET | `/api/asistencia/historial/:empleadoId?fecha=` | JWT | Historial de un empleado; `fecha=YYYY-MM-DD` opcional (sin ella, trae todo) |
 | GET | `/api/asistencia/en-turno` | JWT (supervisor/admin) | Empleados en turno hoy |
@@ -74,7 +84,7 @@ curl -X POST http://localhost:4000/api/asistencia/marcar \
 | PUT | `/api/bodegas/:id` | JWT (supervisor/admin) | Editar geocerca (incluye `codigo`) |
 | DELETE | `/api/bodegas/:id` | JWT (supervisor/admin) | Eliminar geocerca (solo si no tiene empleados ni marcaciones) |
 | GET | `/api/empleados?page&limit&busqueda&activo` | JWT (supervisor/admin) | Listar empleados (rol `empleado`), paginado; `activo=true\|false` opcional |
-| POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado (`diasLaborables` opcional: arreglo 1-7, 1=lunes; default lunes-viernes) |
+| POST | `/api/empleados` | JWT (supervisor/admin) | Crear empleado con `codigoEmpleado` — es como el admin lo autoriza a marcar (Portal: solo con el código, ver `/auth/login-empleado`). `email` y `password` son opcionales (el Portal ya no usa password; si se omite, se guarda un hash aleatorio inutilizable). `diasLaborables` opcional: arreglo 1-7, 1=lunes; default lunes-viernes |
 | PUT | `/api/empleados/:id` | JWT (supervisor/admin) | Editar empleado (incluye `diasLaborables`, `bodegaId`). Nunca modifica `autorizado_todas_bodegas` |
 | PUT | `/api/empleados/:id/autorizacion-bodegas` | JWT (supervisor/admin) | `{ autorizadoTodasBodegas: true\|false }` — único endpoint que puede cambiar esta autorización; auditado con valor anterior/nuevo |
 | DELETE | `/api/empleados/:id` | JWT (supervisor/admin) | Desactivar empleado (soft delete) |
@@ -254,15 +264,153 @@ bodega_id) de un diseño anterior (autorización individual por bodega).
 Ya no la lee ni la escribe ningún endpoint — queda en la base sin uso,
 pendiente de una eliminación futura evaluada por separado.
 
-## Pasar a PostgreSQL (recomendado para producción)
+## Supabase PostgreSQL para el backend
 
-1. Reescribe `src/db/schema.sql` con tipos de PostgreSQL (`UUID`,
-   `TIMESTAMPTZ`, `BOOLEAN`, etc.) y considera agregar la extensión
-   PostGIS para cálculos geoespaciales nativos (`ST_DWithin`).
-2. Reemplaza `src/db/connection.js` por un pool de `pg` (`npm i pg`).
-3. Los controladores usan SQL parametrizado casi idéntico; solo cambia
-   la sintaxis de placeholders (`?` → `$1, $2, ...`) y el manejo de
-   booleanos (ya no hace falta `1`/`0`).
+La aplicación conserva Express como API. El navegador y la app móvil llaman
+a Express; únicamente el backend se conecta a PostgreSQL mediante `pg`.
+GitHub Pages no ejecuta Express ni debe conectarse a la base directamente.
+No se necesita `@supabase/supabase-js` en este backend, y no se usa
+`service_role`.
+
+### Desarrollo local y producción
+
+- Local: deja `DATABASE_URL` vacía en `backend/.env`; se usa SQLite en
+  `DATABASE_PATH` como antes.
+- Producción: configura `DATABASE_URL` en el gestor de secretos del host
+  donde se ejecute Node/Express. La conexión debe ser privada, nunca una
+  variable del frontend.
+- `SUPABASE_URL` y `SUPABASE_ANON_KEY` son opcionales para este diseño y no
+  los lee Express. La URL y la clave publicable/anon no sustituyen una
+  conexión PostgreSQL ni habilitan permisos automáticamente.
+- `JWT_SECRET`, `DATABASE_URL`, `PORT`, `CORS_ORIGIN` y
+  `MAX_GPS_PRECISION_M` controlan el backend. En producción, `JWT_SECRET`
+  debe ser aleatorio y de al menos 32 caracteres. No uses el texto de
+  ejemplo.
+
+Instala dependencias y prueba SQLite desde PowerShell:
+
+```powershell
+Set-Location C:\wamp64\www\LCHANGO\proyecto-asistencia\backend
+npm ci
+Copy-Item .env.example .env
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+npm run migrate
+npm test
+npm start
+```
+
+Pega el resultado del comando de Node en `JWT_SECRET` dentro de `backend/.env`
+local; no lo compartas. Con `DATABASE_URL` vacía, `GET /health` ejecuta una
+consulta `SELECT 1` a SQLite.
+
+### Preparar Supabase
+
+1. Entra al Dashboard y abre el proyecto cuyo **Project ID** sea
+   `lhygcctzdxjrevsugllg`. No pegues claves ni contraseñas en el chat.
+2. En **Table Editor**, revisa si ya hay tablas. Abre cada tabla para ver
+   columnas y tipos; en sus detalles revisa relaciones. En **SQL Editor**,
+   las secciones `Indexes`/`Constraints` de la definición muestran índices,
+   claves únicas y foráneas. Si hay tablas previas, compáralas con
+   `src/db/schema.postgres.sql` antes de aplicar el esquema.
+3. En **Project Settings > API** (o **API Keys** en el Dashboard actual),
+   copia solo la **Project URL** si otro cliente público la necesita y la
+   clave `anon`/`publishable`. Este backend no necesita esas dos variables
+   para conectar con `pg`.
+4. Para `DATABASE_URL`, abre **Project Settings > Database > Connection
+   string** o el botón **Connect** del proyecto y elige URI para Node.js.
+   Usa la cadena del pooler si el host no admite conexiones IPv6/directas.
+   La URI contiene una contraseña de base de datos: guárdala únicamente como
+   secreto en el host del backend. Nunca uses una clave `service_role` como
+   `DATABASE_URL`.
+5. Ejecuta primero `npm run migrate:postgres` desde `backend`, con
+   `DATABASE_URL` configurada solo en tu entorno privado. El script aplica
+   `schema.postgres.sql` de forma transaccional. Luego confirma en
+   **Table Editor** las cinco tablas: `bodegas`, `empleados`,
+   `registros_asistencia`, `auditoria` y `empleado_bodegas`.
+6. Las tablas se crean con RLS habilitado y sin políticas para el acceso
+   `anon`/`authenticated`; además se revocan los permisos de esos roles. Es
+   intencional: los clientes no consultan la base directamente, pasan por
+   Express. El backend valida el JWT y los roles existentes. La credencial
+   PostgreSQL del backend tiene permisos amplios y debe permanecer secreta.
+   No habilites políticas `USING (true)` para los roles públicos.
+
+Una respuesta `404` en la raíz del dominio Supabase o `401` al llamar REST
+sin API key no demuestra que el proyecto esté dañado. Valida tablas en el
+Dashboard y, desde el host privado del backend, valida `GET /health`.
+
+### Prueba y migración de SQLite
+
+No ejecutes la migración real sobre la única copia de tus datos. Primero
+crea una copia consistente de SQLite; el script abre el origen en modo solo
+lectura y no modifica esa base:
+
+```powershell
+Set-Location C:\wamp64\www\LCHANGO\proyecto-asistencia\backend
+npm run sqlite:copy -- "C:\ruta\privada\dev.db" "C:\ruta\privada\prueba-migracion.db"
+$env:DATABASE_PATH = "C:\ruta\privada\prueba-migracion.db"
+npm run migrate
+```
+
+En un **proyecto Supabase de prueba**, configura `DATABASE_URL` en el entorno
+de PowerShell (no la pongas en el comando que compartas ni en Git), aplica
+`npm run migrate:postgres` y simula primero la migración:
+
+```powershell
+$env:DATABASE_URL = "TU_DATABASE_URL"
+npm run migrate:data -- "C:\ruta\privada\prueba-migracion.db" --dry-run
+```
+
+El `--dry-run` revierte las inserciones. El reporte muestra conteos por tabla
+y filas fallidas usando número de fila y código de error, no nombres ni
+contraseñas. Revisa conteos, relaciones y errores antes de repetir el comando
+sin `--dry-run` en el proyecto de prueba. La carga conserva IDs y relaciones,
+convierte enteros de SQLite a booleanos, mantiene el orden de inserción de
+marcaciones y omite claves ya presentes; no sobrescribe filas remotas.
+Los errores de una fila quedan en el reporte y hacen que el proceso termine
+con código distinto de cero.
+
+Después de probar login, roles, consultas, marcaciones y reportes contra el
+proyecto de prueba, haz respaldo de SQLite y programa la migración real. No
+ejecutes `npm run seed` en producción: el comando está bloqueado cuando
+`DATABASE_URL` está configurada.
+
+Las fotos **no se copian** a Storage en este cambio. `foto_url` conserva la
+ruta histórica, pero los archivos siguen en `backend/uploads/fotos`; hay que
+planificar una migración separada a un bucket privado y cambiar la entrega de
+archivos antes de mover producción. No hagas público ese directorio.
+
+### Pruebas de API
+
+Con el servidor local ejecutándose, en otra terminal:
+
+```powershell
+Invoke-RestMethod http://localhost:4000/health
+```
+
+Debe responder `{ "ok": true }`; si la base no está disponible responde HTTP
+503. En un entorno de prueba con datos sintéticos:
+
+- inicia sesión y confirma que un rol empleado no puede entrar a las rutas
+  del panel (`403`); admin puede ver auditoría y empleado no (`403`);
+- registra entrada dentro de la geocerca con precisión aceptable, luego una
+  salida válida; repite una entrada y confirma `422`;
+- envía una ubicación fuera del radio y confirma `422` sin crear registro;
+- lista empleados y bodegas con una sesión de admin/supervisor;
+- crea/edita un empleado o bodega y confirma el evento en auditoría;
+- consulta indicadores y filtra por fecha para comprobar que los días se
+  interpretan en `America/Guayaquil`;
+- prueba exportación Excel/PDF.
+
+Las pruebas automatizadas existentes validan geocerca, secuencia y selección
+de bodega; `test/sqlDialect.test.js` valida la traducción SQL a PostgreSQL.
+No sustituyen una prueba de integración contra un proyecto Supabase de
+prueba.
+
+**Bloqueadores antes de publicar:** `/api/auth/login-empleado` todavía
+acepta solo el código de empleado, y `/api/empleados/publico` enumera esos
+códigos; esto no verifica la identidad de una persona. Además, las fotos
+continúan en disco local. No publiques el portal con datos reales hasta
+resolver autenticación y almacenamiento privado.
 
 ## Próximos pasos (Fase 2 en adelante)
 - Panel web de supervisión en tiempo real (usa `GET /api/asistencia/en-turno`

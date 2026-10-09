@@ -33,9 +33,16 @@ CREATE TABLE IF NOT EXISTS bodegas (
 CREATE TABLE IF NOT EXISTS empleados (
   id                      TEXT PRIMARY KEY,
   nombre_completo         TEXT NOT NULL,
+  -- Identificador de login del empleado (junto con password_hash, que aqui
+  -- puede ser un PIN corto o una contrasena normal segun el caso). Lo
+  -- asigna el administrador al dar de alta, nunca se genera solo.
   codigo_empleado         TEXT NOT NULL UNIQUE,
   cargo                   TEXT,
-  email                   TEXT NOT NULL UNIQUE,
+  -- Opcional: ya NO es el identificador de login (ver codigo_empleado).
+  -- Nullable para no depender de que cada empleado tenga un correo
+  -- corporativo asignado; el indice UNIQUE de abajo sigue funcionando
+  -- porque SQLite permite múltiples NULL en un indice unico.
+  email                   TEXT UNIQUE,
   password_hash           TEXT NOT NULL,
   rol                     TEXT NOT NULL DEFAULT 'empleado', -- empleado | supervisor | admin
   activo                  INTEGER NOT NULL DEFAULT 1,

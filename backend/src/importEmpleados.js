@@ -5,6 +5,10 @@ const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const db = require("./db/connection");
 
+if (db.isPostgres) {
+  throw new Error("Este importador CSV solo admite SQLite local.");
+}
+
 const CSV_PATH = process.argv[2]
   ? path.resolve(process.argv[2])
   : path.join(__dirname, "..", "data", "empleados_import.csv");

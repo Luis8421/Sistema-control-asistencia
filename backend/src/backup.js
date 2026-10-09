@@ -3,6 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const db = require("./db/connection");
 
+if (db.isPostgres) {
+  throw new Error("Este script solo crea backups de SQLite local.");
+}
+
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, "..", "dev.db");
 const BACKUP_DIR = path.join(__dirname, "..", "backups");
 

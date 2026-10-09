@@ -6,6 +6,7 @@ const { clasificarResultadosBodega } = require("../utils/seleccionBodega");
 const { parsePaginacion } = require("../utils/paginacion");
 const { guardarFotoBase64 } = require("../utils/fotos");
 const { generarExcelMarcaciones } = require("../utils/excelExport");
+const asyncHandler = require("../utils/asyncHandler");
 
 const MAX_FILAS_EXPORTACION = 5000;
 
@@ -56,7 +57,7 @@ function mensajeRechazo(motivo, distanciaM, radioMetros) {
  *    multi-bodega — por eso esta rama NO filtra por bodega.activo, para
  *    no introducir un cambio de conducta no pedido.
  */
-function obtenerBodegasCandidatas(empleado) {
+async function obtenerBodegasCandidatas(empleado) {
   if (empleado.autorizado_todas_bodegas) {
     return db.prepare("SELECT * FROM bodegas WHERE activo = 1 ORDER BY codigo").all();
   }
@@ -89,54 +90,61 @@ function validarContraTodas(bodegasAutorizadas, { latitud, longitud, precisionM,
  * empleado y dia, nunca por bodega — un empleado no puede tener una
  * entrada abierta en dos bodegas a la vez.
  */
-function continuarMarcaje({ res, empleado, bodega, distanciaM, tipo, latitud, longitud, precisionM, dispositivoId, foto }) {
-  // Desempate por rowid (orden real de insercion) ademas de
-  // timestamp_servidor: datetime('now') trunca a segundos, asi que dos
-  // marcajes dentro del mismo segundo (poco probable caminando entre
-  // bodegas, pero posible) empatarian en timestamp — sin el desempate,
-  // ORDER BY ... LIMIT 1 podria devolver la fila equivocada como "la
-  // ultima". rowid siempre crece con cada INSERT.
-  const ultimoMarcajeHoy = db
-    .prepare(
-      `SELECT tipo FROM registros_asistencia
-       WHERE empleado_id = ? AND valido = 1 AND date(timestamp_servidor) = date('now', '-5 hours')
-       ORDER BY timestamp_servidor DESC, rowid DESC LIMIT 1`
-    )
-    .get(empleado.id);
+async function continuarMarcaje({ res, empleado, bodega, distanciaM, tipo, latitud, longitud, precisionM, dispositivoId, foto }) {
+  const ordenSql = db.isPostgres ? "orden" : "rowid";
+  const guardar = async (database) => {
+    const ultimoMarcaje = await database
+      .prepare(
+        `SELECT tipo FROM registros_asistencia
+         WHERE empleado_id = ? AND valido = 1 AND date(timestamp_servidor) = date('now', '-5 hours')
+         ORDER BY timestamp_servidor DESC, ${ordenSql} DESC LIMIT 1`
+      )
+      .get(empleado.id);
 
-  const secuencia = validarSecuenciaDelDia(ultimoMarcajeHoy?.tipo ?? null, tipo);
-  if (!secuencia.valido) {
+    const secuencia = validarSecuenciaDelDia(ultimoMarcaje?.tipo ?? null, tipo);
+    if (!secuencia.valido) return { secuencia };
+
+    // La foto solo se decodifica/guarda si el marcaje va a quedar registrado.
+    let fotoUrl = null;
+    if (foto) fotoUrl = guardarFotoBase64(foto);
+
+    const id = uuidv4();
+    await database
+      .prepare(
+        `INSERT INTO registros_asistencia
+          (id, tipo, latitud, longitud, precision_gps_m, distancia_a_bodega_m, valido, motivo_invalido, dispositivo_id, foto_url, empleado_id, bodega_id)
+         VALUES (?, ?, ?, ?, ?, ?, TRUE, NULL, ?, ?, ?, ?)`
+      )
+      .run(id, tipo, latitud, longitud, precisionM ?? null, distanciaM, dispositivoId ?? null, fotoUrl, empleado.id, bodega.id);
+
+    return { registro: await database.prepare("SELECT * FROM registros_asistencia WHERE id = ?").get(id) };
+  };
+
+  let resultado;
+  try {
+    if (db.isPostgres) {
+      resultado = await db.withTransaction(async (transaction) => {
+        await transaction.prepare("SELECT id FROM empleados WHERE id = ? FOR UPDATE").get(empleado.id);
+        return guardar(transaction);
+      });
+    } else {
+      resultado = await guardar(db);
+    }
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    throw error;
+  }
+
+  if (resultado.secuencia) {
     return res.status(422).json({
-      error: mensajeRechazo(secuencia.motivo),
-      motivo: secuencia.motivo,
+      error: mensajeRechazo(resultado.secuencia.motivo),
+      motivo: resultado.secuencia.motivo,
       distanciaM: Math.round(distanciaM),
     });
   }
 
-  // La foto solo se decodifica/guarda si el marcaje va a quedar registrado
-  // (evita dejar archivos huerfanos en uploads/fotos/ por marcajes que se
-  // terminan rechazando).
-  let fotoUrl = null;
-  if (foto) {
-    try {
-      fotoUrl = guardarFotoBase64(foto);
-    } catch (err) {
-      return res.status(400).json({ error: err.message });
-    }
-  }
-
-  const id = uuidv4();
-
-  db.prepare(
-    `INSERT INTO registros_asistencia
-      (id, tipo, latitud, longitud, precision_gps_m, distancia_a_bodega_m, valido, motivo_invalido, dispositivo_id, foto_url, empleado_id, bodega_id)
-     VALUES (?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?)`
-  ).run(id, tipo, latitud, longitud, precisionM ?? null, distanciaM, dispositivoId ?? null, fotoUrl, empleado.id, bodega.id);
-
-  const registro = db.prepare("SELECT * FROM registros_asistencia WHERE id = ?").get(id);
-
   return res.status(201).json({
-    registro,
+    registro: resultado.registro,
     mensaje: "Marcaje registrado y validado correctamente.",
   });
 }
@@ -169,7 +177,7 @@ function continuarMarcaje({ res, empleado, bodega, distanciaM, tipo, latitud, lo
  * opciones, y el empleado debe reenviar la misma marcacion agregando
  * `bodegaId` con su eleccion.
  */
-function marcar(req, res) {
+async function marcar(req, res) {
   const { tipo, latitud, longitud, precisionM, ubicacionSimulada, dispositivoId, foto, bodegaId } = req.body;
 
   if (!tipo || !["entrada", "salida"].includes(tipo)) {
@@ -179,13 +187,13 @@ function marcar(req, res) {
     return res.status(400).json({ error: "latitud y longitud son requeridas y deben ser numericas" });
   }
 
-  const empleado = db.prepare("SELECT * FROM empleados WHERE id = ?").get(req.usuario.id);
+  const empleado = await db.prepare("SELECT * FROM empleados WHERE id = ?").get(req.usuario.id);
 
   if (!empleado || !empleado.activo) {
     return res.status(404).json({ error: "Empleado no encontrado o inactivo" });
   }
 
-  const bodegasAutorizadas = obtenerBodegasCandidatas(empleado);
+  const bodegasAutorizadas = await obtenerBodegasCandidatas(empleado);
 
   // Estructuralmente casi imposible tras el backfill de la migracion,
   // pero si algun dia ocurriera (dato corrupto), mejor un 422 claro que
@@ -260,7 +268,7 @@ function marcar(req, res) {
  * antes); el portal de marcaje la usa para pedir solo el dia en curso en
  * vez de traer meses de historial en cada carga.
  */
-function historial(req, res) {
+async function historial(req, res) {
   const { empleadoId } = req.params;
   const { fecha } = req.query;
 
@@ -278,7 +286,7 @@ function historial(req, res) {
     params.push(fecha);
   }
 
-  const registros = db
+  const registros = await db
     .prepare(
       `SELECT r.*, b.nombre AS bodega_nombre
        FROM registros_asistencia r
@@ -296,8 +304,8 @@ function historial(req, res) {
  * Empleados cuyo ultimo marcaje valido del dia es "entrada".
  * Pensado como base para el panel de supervision (Fase 2).
  */
-function enTurno(req, res) {
-  const registrosHoy = db
+async function enTurno(req, res) {
+  const registrosHoy = await db
     .prepare(
       `SELECT r.*, e.nombre_completo, b.nombre AS bodega_nombre
        FROM registros_asistencia r
@@ -352,7 +360,7 @@ function construirFiltrosMarcaciones(query, res) {
   }
   if (valido === "true" || valido === "false") {
     where.push("r.valido = ?");
-    params.push(valido === "true" ? 1 : 0);
+    params.push(valido === "true");
   }
 
   return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
@@ -362,18 +370,18 @@ function construirFiltrosMarcaciones(query, res) {
  * GET /api/marcaciones?page&limit&fecha&empleadoId&tipo
  * Listado general para el panel de administracion, con filtros opcionales.
  */
-function listarTodas(req, res) {
+async function listarTodas(req, res) {
   const { page, limit, offset } = parsePaginacion(req.query);
 
   const filtros = construirFiltrosMarcaciones(req.query, res);
   if (!filtros) return;
   const { whereSql, params } = filtros;
 
-  const total = db
+  const total = await db
     .prepare(`SELECT COUNT(*) AS total FROM registros_asistencia r ${whereSql}`)
-    .get(...params).total;
+    .get(...params);
 
-  const data = db
+  const data = await db
     .prepare(
       `SELECT r.*, e.nombre_completo, e.codigo_empleado, b.nombre AS bodega_nombre
        FROM registros_asistencia r
@@ -385,7 +393,7 @@ function listarTodas(req, res) {
     )
     .all(...params, limit, offset);
 
-  return res.json({ data, page, limit, total, totalPaginas: Math.ceil(total / limit) || 1 });
+  return res.json({ data, page, limit, total: Number(total.total), totalPaginas: Math.ceil(Number(total.total) / limit) || 1 });
 }
 
 /**
@@ -398,7 +406,7 @@ async function exportarExcel(req, res) {
   if (!filtros) return;
   const { whereSql, params } = filtros;
 
-  const registros = db
+  const registros = await db
     .prepare(
       `SELECT r.*, e.nombre_completo, e.codigo_empleado, b.nombre AS bodega_nombre
        FROM registros_asistencia r
@@ -418,4 +426,10 @@ async function exportarExcel(req, res) {
   }
 }
 
-module.exports = { marcar, historial, enTurno, listarTodas, exportarExcel };
+module.exports = {
+  marcar: asyncHandler(marcar),
+  historial: asyncHandler(historial),
+  enTurno: asyncHandler(enTurno),
+  listarTodas: asyncHandler(listarTodas),
+  exportarExcel: asyncHandler(exportarExcel),
+};

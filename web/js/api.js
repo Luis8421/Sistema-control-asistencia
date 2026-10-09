@@ -4,7 +4,12 @@
 // host/dominio que se use para entrar. Si abres el archivo directo
 // (doble clic, file://) no hay Caddy de por medio, asi que ahi si apunta
 // directo al backend en localhost:4000.
-const API_URL = location.protocol === "file:" ? "http://localhost:4000/api" : "/api";
+const apiUrlConfigurada = window.ASISTENCIA_API_URL && window.ASISTENCIA_API_URL.trim();
+const API_URL = apiUrlConfigurada
+  ? apiUrlConfigurada.replace(/\/+$/, "")
+  : location.protocol === "file:" || location.hostname === "localhost"
+    ? "http://localhost:4000/api"
+    : "/api";
 
 // Sesion del panel de administracion: login real con JWT (supervisor o
 // admin), igual que usa la app movil. Se guarda bajo claves propias para

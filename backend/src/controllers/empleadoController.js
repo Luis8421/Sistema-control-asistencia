@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const db = require("../db/connection");
 const { parsePaginacion } = require("../utils/paginacion");
 const { registrarAuditoria } = require("../utils/auditoria");
+const asyncHandler = require("../utils/asyncHandler");
 
 // Nunca se selecciona password_hash hacia el panel de administracion.
 const CAMPOS_PUBLICOS = `
@@ -36,7 +37,7 @@ function normalizarDiasLaborables(valor) {
  * (sin el filtro, trae activos e inactivos, igual que antes) — lo usa el
  * dashboard para contar empleados activos con una sola consulta COUNT.
  */
-function listar(req, res) {
+async function listar(req, res) {
   const { page, limit, offset } = parsePaginacion(req.query);
   const busqueda = (req.query.busqueda || "").trim();
 
@@ -48,33 +49,62 @@ function listar(req, res) {
   }
   if (req.query.activo === "true" || req.query.activo === "false") {
     where.push("activo = ?");
-    params.push(req.query.activo === "true" ? 1 : 0);
+    params.push(req.query.activo === "true");
   }
   const whereSql = `WHERE ${where.join(" AND ")}`;
 
-  const total = db
+  const total = await db
     .prepare(`SELECT COUNT(*) AS total FROM empleados ${whereSql}`)
-    .get(...params).total;
+    .get(...params);
 
-  const data = db
+  const data = await db
     .prepare(
       `SELECT ${CAMPOS_PUBLICOS} FROM empleados ${whereSql}
        ORDER BY nombre_completo ASC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset);
 
-  return res.json({ data, page, limit, total, totalPaginas: Math.ceil(total / limit) || 1 });
+  return res.json({ data, page, limit, total: Number(total.total), totalPaginas: Math.ceil(Number(total.total) / limit) || 1 });
 }
 
 /**
- * POST /api/empleados
- * body: { nombreCompleto, codigoEmpleado, email, password, cargo, bodegaId,
- *         horaEntradaEsperada, horaSalidaEsperada, toleranciaMin,
- *         diasLaborables }
- * El rol siempre se crea como 'empleado'. diasLaborables es opcional
- * (default lunes-viernes): arreglo de numeros 1 (lunes) a 7 (domingo).
+ * GET /api/empleados/publico
+ * Sin autenticacion (ver routes/empleados.js): alimenta el selector de
+ * nombres del Portal de Marcaje. Devuelve solo empleados activos y los
+ * campos nombre y codigo (no email, bodega, cargo ni password_hash).
+ * Como el codigo es la unica credencial aceptada por ese portal, esta ruta
+ * publica permite enumerar las cuentas y no autentica la identidad.
  */
-function crear(req, res) {
+async function listarPublico(req, res) {
+  const data = await db
+    .prepare(
+      "SELECT codigo_empleado, nombre_completo FROM empleados WHERE rol = 'empleado' AND activo = 1 ORDER BY nombre_completo ASC"
+    )
+    .all();
+
+  return res.json(data.map((e) => ({ codigoEmpleado: e.codigo_empleado, nombreCompleto: e.nombre_completo })));
+}
+
+// Minimo aceptado para el password/PIN, SOLO si se decide asignar uno
+// (panel de administracion via login(), no el Portal de Marcaje). Un PIN
+// corto es deliberadamente conveniente, pero por debajo de esto es
+// trivial de adivinar.
+const PIN_LONGITUD_MINIMA = 4;
+
+/**
+ * POST /api/empleados
+ * body: { nombreCompleto, codigoEmpleado, bodegaId, email?, password?,
+ *         cargo, horaEntradaEsperada, horaSalidaEsperada, toleranciaMin,
+ *         diasLaborables }
+ * El rol siempre se crea como 'empleado'. El Portal de Marcaje ya NO usa
+ * password (ver authController.loginEmpleado: entra solo con
+ * codigoEmpleado) -- por eso password es opcional aqui. email tampoco es
+ * obligatorio. Si no se manda password, se guarda un hash aleatorio
+ * inutilizable (la columna sigue siendo NOT NULL, pero nada la compara
+ * nunca para este flujo). diasLaborables es opcional (default
+ * lunes-viernes): arreglo de numeros 1 (lunes) a 7 (domingo).
+ */
+async function crear(req, res) {
   const {
     nombreCompleto,
     codigoEmpleado,
@@ -88,10 +118,14 @@ function crear(req, res) {
     diasLaborables,
   } = req.body;
 
-  if (!nombreCompleto || !codigoEmpleado || !email || !password || !bodegaId) {
+  if (!nombreCompleto || !codigoEmpleado || !bodegaId) {
     return res.status(400).json({
-      error: "nombreCompleto, codigoEmpleado, email, password y bodegaId son requeridos",
+      error: "nombreCompleto, codigoEmpleado y bodegaId son requeridos",
     });
+  }
+
+  if (password && password.length < PIN_LONGITUD_MINIMA) {
+    return res.status(400).json({ error: `El password/PIN debe tener al menos ${PIN_LONGITUD_MINIMA} caracteres` });
   }
 
   let diasLaborablesCsv;
@@ -101,22 +135,33 @@ function crear(req, res) {
     return res.status(400).json({ error: err.message });
   }
 
-  const bodega = db.prepare("SELECT id FROM bodegas WHERE id = ?").get(bodegaId);
+  const bodega = await db.prepare("SELECT id FROM bodegas WHERE id = ?").get(bodegaId);
   if (!bodega) {
     return res.status(400).json({ error: "bodegaId no corresponde a una geocerca existente" });
   }
 
-  const yaExiste = db
-    .prepare("SELECT id FROM empleados WHERE email = ? OR codigo_empleado = ?")
-    .get(email, codigoEmpleado);
-  if (yaExiste) {
-    return res.status(409).json({ error: "Ya existe un empleado con ese email o codigo" });
+  // Chequeados por separado (en vez de un solo "email = ? OR codigo = ?")
+  // para no bindear un email ausente como undefined en la consulta, y para
+  // poder decir exactamente cual de los dos esta duplicado.
+  const codigoEnUso = await db.prepare("SELECT id FROM empleados WHERE codigo_empleado = ?").get(codigoEmpleado);
+  if (codigoEnUso) {
+    return res.status(409).json({ error: "Ya existe un empleado con ese codigo" });
+  }
+  if (email) {
+    const emailEnUso = await db.prepare("SELECT id FROM empleados WHERE email = ?").get(email);
+    if (emailEnUso) {
+      return res.status(409).json({ error: "Ya existe un empleado con ese email" });
+    }
   }
 
   const id = uuidv4();
-  const passwordHash = bcrypt.hashSync(password, 10);
+  // password_hash es NOT NULL en el esquema, pero loginEmpleado() (Portal
+  // de Marcaje) nunca la compara -- si no se asigna un password/PIN
+  // explicito, se guarda un hash de un valor aleatorio que nadie conoce
+  // ni puede volver a generar, solo para satisfacer la columna.
+  const passwordHash = bcrypt.hashSync(password || uuidv4(), 10);
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO empleados
       (id, nombre_completo, codigo_empleado, cargo, email, password_hash, rol, bodega_id, hora_entrada_esperada, hora_salida_esperada, tolerancia_min, dias_laborables)
      VALUES (?, ?, ?, ?, ?, ?, 'empleado', ?, ?, ?, ?, COALESCE(?, '1,2,3,4,5'))`
@@ -125,7 +170,7 @@ function crear(req, res) {
     nombreCompleto,
     codigoEmpleado,
     cargo ?? null,
-    email,
+    email ?? null,
     passwordHash,
     bodegaId,
     horaEntradaEsperada ?? "08:00",
@@ -138,9 +183,9 @@ function crear(req, res) {
   // empleado nuevo NUNCA recibe autorizacion global automaticamente, sin
   // importar como se haya creado. Queda restringido a bodegaId hasta que
   // un admin se la conceda explicitamente via PUT /:id/autorizacion-bodegas.
-  const empleado = db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
+  const empleado = await db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
 
-  registrarAuditoria({
+  await registrarAuditoria({
     usuario: req.usuario,
     accion: "crear",
     entidad: "empleado",
@@ -154,17 +199,22 @@ function crear(req, res) {
 /**
  * PUT /api/empleados/:id
  * Edita datos del empleado. El password solo se actualiza si se envia.
- * El rol y codigoEmpleado no son editables desde este endpoint.
+ * El rol no es editable desde este endpoint. codigoEmpleado SI es editable
+ * (a diferencia de antes): ahora es la credencial de entrada al Portal de
+ * Marcaje (login-empleado, sin password), asi que el admin necesita poder
+ * cambiar codigos feos autogenerados (ej. "EMP-CDADB39B") por algo que el
+ * empleado pueda recordar.
  */
-function actualizar(req, res) {
+async function actualizar(req, res) {
   const { id } = req.params;
-  const existente = db.prepare("SELECT * FROM empleados WHERE id = ?").get(id);
+  const existente = await db.prepare("SELECT * FROM empleados WHERE id = ?").get(id);
   if (!existente) {
     return res.status(404).json({ error: "Empleado no encontrado" });
   }
 
   const {
     nombreCompleto,
+    codigoEmpleado,
     cargo,
     email,
     bodegaId,
@@ -176,6 +226,14 @@ function actualizar(req, res) {
     diasLaborables,
   } = req.body;
 
+  if (codigoEmpleado !== undefined && !codigoEmpleado) {
+    return res.status(400).json({ error: "codigoEmpleado no puede quedar vacio" });
+  }
+
+  if (password && password.length < PIN_LONGITUD_MINIMA) {
+    return res.status(400).json({ error: `El password/PIN debe tener al menos ${PIN_LONGITUD_MINIMA} caracteres` });
+  }
+
   let diasLaborablesCsv;
   try {
     diasLaborablesCsv = normalizarDiasLaborables(diasLaborables);
@@ -184,14 +242,14 @@ function actualizar(req, res) {
   }
 
   if (bodegaId) {
-    const bodega = db.prepare("SELECT id FROM bodegas WHERE id = ?").get(bodegaId);
+    const bodega = await db.prepare("SELECT id FROM bodegas WHERE id = ?").get(bodegaId);
     if (!bodega) {
       return res.status(400).json({ error: "bodegaId no corresponde a una geocerca existente" });
     }
   }
 
   if (email && email !== existente.email) {
-    const emailEnUso = db
+    const emailEnUso = await db
       .prepare("SELECT id FROM empleados WHERE email = ? AND id != ?")
       .get(email, id);
     if (emailEnUso) {
@@ -199,20 +257,30 @@ function actualizar(req, res) {
     }
   }
 
+  if (codigoEmpleado && codigoEmpleado !== existente.codigo_empleado) {
+    const codigoEnUso = await db
+      .prepare("SELECT id FROM empleados WHERE codigo_empleado = ? AND id != ?")
+      .get(codigoEmpleado, id);
+    if (codigoEnUso) {
+      return res.status(409).json({ error: "Ese codigo ya esta en uso por otro empleado" });
+    }
+  }
+
   const passwordHash = password ? bcrypt.hashSync(password, 10) : existente.password_hash;
 
-  db.prepare(
+  await db.prepare(
     `UPDATE empleados SET
-      nombre_completo = ?, cargo = ?, email = ?, bodega_id = ?, activo = ?,
+      nombre_completo = ?, codigo_empleado = ?, cargo = ?, email = ?, bodega_id = ?, activo = ?,
       hora_entrada_esperada = ?, hora_salida_esperada = ?, tolerancia_min = ?,
       dias_laborables = ?, password_hash = ?
      WHERE id = ?`
   ).run(
     nombreCompleto ?? existente.nombre_completo,
+    codigoEmpleado ?? existente.codigo_empleado,
     cargo !== undefined ? cargo : existente.cargo,
     email ?? existente.email,
     bodegaId ?? existente.bodega_id,
-    activo !== undefined ? (activo ? 1 : 0) : existente.activo,
+    activo !== undefined ? activo : existente.activo,
     horaEntradaEsperada ?? existente.hora_entrada_esperada,
     horaSalidaEsperada ?? existente.hora_salida_esperada,
     toleranciaMin ?? existente.tolerancia_min,
@@ -221,9 +289,9 @@ function actualizar(req, res) {
     id
   );
 
-  const actualizado = db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
+  const actualizado = await db.prepare(`SELECT ${CAMPOS_PUBLICOS} FROM empleados WHERE id = ?`).get(id);
 
-  registrarAuditoria({
+  await registrarAuditoria({
     usuario: req.usuario,
     accion: "actualizar",
     entidad: "empleado",
@@ -250,9 +318,9 @@ function actualizar(req, res) {
  * valor anterior y el nuevo explicitamente (no solo el nombre del campo),
  * porque es una decision de acceso, no un dato administrativo mas.
  */
-function actualizarAutorizacionBodegas(req, res) {
+async function actualizarAutorizacionBodegas(req, res) {
   const { id } = req.params;
-  const existente = db.prepare("SELECT id, autorizado_todas_bodegas FROM empleados WHERE id = ?").get(id);
+  const existente = await db.prepare("SELECT id, autorizado_todas_bodegas FROM empleados WHERE id = ?").get(id);
   if (!existente) {
     return res.status(404).json({ error: "Empleado no encontrado" });
   }
@@ -265,9 +333,9 @@ function actualizarAutorizacionBodegas(req, res) {
   const valorAnterior = !!existente.autorizado_todas_bodegas;
   const valorNuevo = autorizadoTodasBodegas;
 
-  db.prepare("UPDATE empleados SET autorizado_todas_bodegas = ? WHERE id = ?").run(valorNuevo ? 1 : 0, id);
+  await db.prepare("UPDATE empleados SET autorizado_todas_bodegas = ? WHERE id = ?").run(valorNuevo, id);
 
-  registrarAuditoria({
+  await registrarAuditoria({
     usuario: req.usuario,
     accion: "actualizar",
     entidad: "empleado",
@@ -282,16 +350,16 @@ function actualizarAutorizacionBodegas(req, res) {
  * DELETE /api/empleados/:id
  * Soft delete: desactiva al empleado, no borra el historial de marcaciones.
  */
-function eliminar(req, res) {
+async function eliminar(req, res) {
   const { id } = req.params;
-  const existente = db.prepare("SELECT id FROM empleados WHERE id = ?").get(id);
+  const existente = await db.prepare("SELECT id FROM empleados WHERE id = ?").get(id);
   if (!existente) {
     return res.status(404).json({ error: "Empleado no encontrado" });
   }
 
-  db.prepare("UPDATE empleados SET activo = 0 WHERE id = ?").run(id);
+  await db.prepare("UPDATE empleados SET activo = FALSE WHERE id = ?").run(id);
 
-  registrarAuditoria({
+  await registrarAuditoria({
     usuario: req.usuario,
     accion: "eliminar",
     entidad: "empleado",
@@ -301,4 +369,11 @@ function eliminar(req, res) {
   return res.status(204).send();
 }
 
-module.exports = { listar, crear, actualizar, actualizarAutorizacionBodegas, eliminar };
+module.exports = {
+  listar: asyncHandler(listar),
+  listarPublico: asyncHandler(listarPublico),
+  crear: asyncHandler(crear),
+  actualizar: asyncHandler(actualizar),
+  actualizarAutorizacionBodegas: asyncHandler(actualizarAutorizacionBodegas),
+  eliminar: asyncHandler(eliminar),
+};

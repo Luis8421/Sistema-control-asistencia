@@ -3,14 +3,20 @@ node_modules/
 
 # Secretos y configuracion local — nunca versionar
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!**/.env.example
 
 # Base de datos local (datos reales, password hashes, PII)
+*.db
+*.sqlite
+*.sqlite3
 backend/dev.db
 backend/dev.db-shm
 backend/dev.db-wal
-backend/backups/
+backups/
+uploads/
+fotos/
 
 # Backups manuales sueltos en la raiz (dev.db.bak.*, env.bak.* con
 # secretos reales como JWT_SECRET en texto plano) — nunca versionar
@@ -24,7 +30,8 @@ backend/uploads/fotos/*
 !backend/uploads/fotos/.gitkeep
 
 # Datos de importacion (pueden contener PII de empleados reales)
-backend/data/*.csv
+*.csv
+migration-report-*.json
 
 # Reportes de cobertura de tests (c8)
 backend/coverage/

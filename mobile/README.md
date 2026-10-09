@@ -18,18 +18,25 @@ npm install
 
 ## Antes de correr: configura la URL del backend
 
-Edita `api/client.js` y cambia `API_URL` por la IP de tu computador en la
-red local (no uses `localhost`, el celular no la vería):
+Configura la variable Expo `EXPO_PUBLIC_API_URL` con la URL pública del
+backend Express, o la IP de tu computador en la red local (no uses
+`localhost`, el celular no la vería). Para desarrollo, crea `.env` desde
+`.env.example`:
 
-```js
-const API_URL = "http://192.168.1.50:4000/api"; // <- tu IP local, puerto 4000
+```powershell
+Copy-Item .env.example .env
 ```
 
 - En un dispositivo físico con Expo Go: usa la IP local de tu PC
   (`ipconfig` en Windows, `ifconfig` o `ip a` en Mac/Linux). El celular y la
-  PC deben estar en la misma red Wi-Fi.
-- En el emulador de Android: puedes usar `http://10.0.2.2:4000/api`.
-- En el simulador de iOS: puedes usar `http://localhost:4000/api`.
+  PC deben estar en la misma red Wi-Fi. En `.env`, asigna esa URL a
+  `EXPO_PUBLIC_API_URL`.
+
+- En el emulador de Android: usa `http://10.0.2.2:4000/api`.
+- En el simulador de iOS: usa `http://localhost:4000/api`.
+
+La variable solo contiene la URL pública del API, nunca `DATABASE_URL`,
+`JWT_SECRET` ni una clave de Supabase.
 
 ## Correr la app
 
@@ -42,8 +49,10 @@ o con la cámara (iOS) para abrir la app en tu celular.
 
 ## Flujo de prueba
 
-1. Inicia sesión con `juan.perez@empresa.com` / `demo1234` (usuario creado
-   por el `seed` del backend).
+1. Inicia sesión con el código de empleado `EMP-001` / `demo1234` (usuario
+   creado por el `seed` del backend). No hay pantalla de autoregistro: un
+   empleado solo puede entrar si un administrador lo dio de alta antes
+   desde el panel web (ver `backend/README.md`).
 2. Presiona "Marcar Entrada". La app pedirá permiso de ubicación la primera
    vez.
 3. Si estás dentro del radio autorizado de la bodega configurada en el

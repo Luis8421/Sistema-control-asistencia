@@ -1,12 +1,13 @@
 const db = require("../db/connection");
 const { parsePaginacion } = require("../utils/paginacion");
+const asyncHandler = require("../utils/asyncHandler");
 
 /**
  * GET /api/auditoria?page&limit&entidad&usuarioId&fecha
  * Solo admin (mas estricto que el resto del panel: un supervisor no debe
  * poder ver ni borrar rastro de sus propias acciones ni las de otros).
  */
-function listar(req, res) {
+async function listar(req, res) {
   const { page, limit, offset } = parsePaginacion(req.query);
   const { entidad, usuarioId, fecha } = req.query;
 
@@ -32,11 +33,11 @@ function listar(req, res) {
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-  const total = db
+  const total = await db
     .prepare(`SELECT COUNT(*) AS total FROM auditoria a ${whereSql}`)
-    .get(...params).total;
+    .get(...params);
 
-  const data = db
+  const data = await db
     .prepare(
       `SELECT a.* FROM auditoria a
        ${whereSql}
@@ -45,7 +46,7 @@ function listar(req, res) {
     )
     .all(...params, limit, offset);
 
-  return res.json({ data, page, limit, total, totalPaginas: Math.ceil(total / limit) || 1 });
+  return res.json({ data, page, limit, total: Number(total.total), totalPaginas: Math.ceil(Number(total.total) / limit) || 1 });
 }
 
-module.exports = { listar };
+module.exports = { listar: asyncHandler(listar) };

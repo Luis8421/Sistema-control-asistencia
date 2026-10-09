@@ -82,11 +82,12 @@
             <div class="mb-2">
               <label class="form-label small">Codigo de empleado</label>
               <input type="text" class="form-control" id="codigoEmpleado" required />
+              <div class="form-text">Es lo que el empleado usa para entrar al Portal de Marcaje (junto a su nombre) — usa algo facil de recordar.</div>
             </div>
 
             <div class="mb-2">
-              <label class="form-label small">Email</label>
-              <input type="email" class="form-control" id="email" required />
+              <label class="form-label small">Email (opcional)</label>
+              <input type="email" class="form-control" id="email" />
             </div>
 
             <div class="mb-2">
@@ -117,12 +118,6 @@
                 <input type="checkbox" class="btn-check" id="dia7" value="7" />
                 <label class="btn btn-outline-secondary btn-sm" for="dia7">Dom</label>
               </div>
-            </div>
-
-            <div class="mb-2" id="grupoPassword">
-              <label class="form-label small" id="labelPassword">Contrasena</label>
-              <input type="password" class="form-control" id="password" />
-              <div class="form-text" id="ayudaPassword"></div>
             </div>
 
             <div class="form-check" id="grupoActivo">
@@ -158,8 +153,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="js/api.js"></script>
+  <script src="js/config.js?v=1"></script>
+  <script src="js/api.js?v=3"></script>
   <script src="js/nav.js"></script>
-  <script src="js/empleados.js"></script>
+  <script src="js/empleados.js?v=2"></script>
 </body>
 </html>

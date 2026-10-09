@@ -25,17 +25,25 @@
   <div class="container py-4" style="max-width: 480px">
     <h1 class="h4 text-center mb-4">Portal de Asistencia</h1>
 
-    <!-- Login de empleado -->
+    <!-- Login de empleado: SIN password, decision explicita (ver
+         marcaje.js / authController.loginEmpleado). El empleado elige su
+         nombre de una lista que NO muestra el codigo, y lo escribe de
+         memoria como confirmacion -- es una verificacion debil a
+         proposito (los codigos no son secretos), la foto capturada al
+         marcar sigue siendo la evidencia real de quien marco. -->
     <div id="bloqueLogin" class="card p-4">
-      <p class="text-muted small text-center mb-3">Ingresa con tu cuenta de empleado</p>
+      <p class="text-muted small text-center mb-3">Elige tu nombre e ingresa tu codigo de empleado</p>
       <form id="formLogin">
         <div class="mb-3">
-          <label class="form-label small" for="email">Correo electronico</label>
-          <input type="email" class="form-control" id="email" required autocomplete="username" />
+          <label class="form-label small" for="selectorEmpleado">Nombre</label>
+          <select class="form-select" id="selectorEmpleado" required>
+            <option value="" selected disabled>-- Selecciona tu nombre --</option>
+          </select>
         </div>
+
         <div class="mb-3">
-          <label class="form-label small" for="password">Contrasena</label>
-          <input type="password" class="form-control" id="password" required autocomplete="current-password" />
+          <label class="form-label small" for="codigoEmpleado">Codigo de empleado</label>
+          <input type="text" class="form-control" id="codigoEmpleado" required autocomplete="username" autocapitalize="characters" />
         </div>
 
         <div id="errorLogin" class="alert alert-danger py-2 small d-none"></div>
@@ -124,6 +132,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="js/marcaje.js"></script>
+  <script src="js/config.js?v=1"></script>
+  <script src="js/marcaje.js?v=5"></script>
 </body>
 </html>

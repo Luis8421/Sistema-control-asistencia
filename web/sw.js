@@ -7,12 +7,13 @@
 //
 // Sube CACHE_NAME cada vez que cambie algun archivo del shell, para que
 // los clientes con una version vieja en cache la reemplacen.
-const CACHE_NAME = "asistencia-portal-v1";
+const CACHE_NAME = "asistencia-portal-v4";
 
 const ARCHIVOS_APP_SHELL = [
   "marcaje.html",
   "css/style.css",
   "js/marcaje.js",
+  "js/config.js",
   "manifest.json",
   "icons/icon-192.png",
   "icons/icon-512.png",

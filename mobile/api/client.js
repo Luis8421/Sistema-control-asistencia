@@ -4,7 +4,7 @@ import * as SecureStore from "expo-secure-store";
 // (no uses "localhost" en un dispositivo/emulador físico, usa la IP de tu PC,
 // ej: "http://192.168.1.50:4000/api"). En el emulador de Android usa
 // "http://10.0.2.2:4000/api".
-const API_URL = "http://192.168.1.50:4000/api";
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.50:4000/api";
 
 async function getToken() {
   return SecureStore.getItemAsync("token");
@@ -42,17 +42,8 @@ async function request(path, { method = "GET", body } = {}) {
   return data;
 }
 
-export async function login(email, password) {
-  const data = await request("/auth/login", { method: "POST", body: { email, password } });
-  await setToken(data.token);
-  return data.empleado;
-}
-
-export async function registro(nombreCompleto, email, password) {
-  const data = await request("/auth/registro", {
-    method: "POST",
-    body: { nombreCompleto, email, password },
-  });
+export async function login(codigoEmpleado, password) {
+  const data = await request("/auth/login", { method: "POST", body: { codigoEmpleado, password } });
   await setToken(data.token);
   return data.empleado;
 }

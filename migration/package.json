@@ -1,0 +1,16 @@
+{
+  "name": "asistencia-mysql-postgres-migration",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated, guarded data migration from MySQL to Supabase PostgreSQL",
+  "type": "commonjs",
+  "scripts": {
+    "migrate": "node mysqlToPostgres.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.6",
+    "mysql2": "^3.14.0",
+    "pg": "^8.23.1"
+  }
+}

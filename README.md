@@ -9,7 +9,8 @@ el detalle completo.
 
 ## Contenido
 
-- **`backend/`** — API Node.js + Express + SQLite. Geovalidación,
+- **`backend/`** — API Node.js + Express + SQLite local o Supabase PostgreSQL
+  mediante `pg` en producción. Geovalidación,
   auditoría de acciones administrativas, indicadores de puntualidad,
   reportes Excel/PDF, dashboard, y una suite de tests automatizados
   (`npm test`) sobre la lógica de geovalidación y secuencia de marcaje.
@@ -30,10 +31,11 @@ el detalle completo.
    datos de ejemplo, corre `npm run dev`, corre `npm test`).
 2. Abre `web/marcaje.html` (Portal de Asistencia) o sigue `mobile/README.md`
    para correr la app en tu celular con Expo Go.
-3. Inicia sesión con `juan.perez@empresa.com` / `demo1234` y prueba
+3. En el Portal, selecciona el empleado e ingresa `EMP-001` (el portal no
+   pide contraseña); en la app móvil usa `EMP-001` / `demo1234`. Prueba
    "Marcar Entrada".
-4. Para el panel de administración, abre `web/index.html` e inicia sesión
-   con `admin@empresa.com` / `demo1234`.
+4. Para el panel de administración, abre `web/login.html` e inicia sesión
+   con `ADM-001` / `demo1234`.
 
 ## Qué sigue
 

@@ -1,7 +1,12 @@
 // Ver comentario en js/api.js: con Caddy sirviendo panel + proxy /api en
 // el mismo origen, una ruta relativa funciona para cualquier empleado sin
 // importar si entro por asistencia.local o por la IP.
-const API_URL = location.protocol === "file:" ? "http://localhost:4000/api" : "/api";
+const apiUrlConfigurada = window.ASISTENCIA_API_URL && window.ASISTENCIA_API_URL.trim();
+const API_URL = apiUrlConfigurada
+  ? apiUrlConfigurada.replace(/\/+$/, "")
+  : location.protocol === "file:" || location.hostname === "localhost"
+    ? "http://localhost:4000/api"
+    : "/api";
 
 // Modo diagnostico para pruebas de campo de GPS: SOLO se activa si la URL
 // trae ?diag=1 explicitamente (ej. https://asistencia.local/marcaje.html?diag=1).
@@ -30,8 +35,32 @@ function reiniciarDiagnostico() {
   }
 }
 
-// Sesion de empleado (JWT), separada del panel admin (que usa API key y
-// no tiene login). Se guarda bajo claves propias para no chocar con nada.
+// Mapa nombreCompleto->codigoEmpleado, cargado desde /empleados/publico.
+// El selector muestra solo nombres, pero la respuesta de esta ruta publica
+// incluye los codigos y puede consultarse desde las herramientas del
+// navegador; el codigo no es una prueba de identidad.
+let empleadosPorNombre = new Map();
+
+async function cargarSelectorEmpleados() {
+  const select = document.getElementById("selectorEmpleado");
+  if (!select) return;
+
+  try {
+    const res = await fetch(`${API_URL}/empleados/publico`);
+    const empleados = await res.json();
+    empleados.forEach((e) => {
+      empleadosPorNombre.set(e.nombreCompleto, e.codigoEmpleado);
+      const opt = document.createElement("option");
+      opt.value = e.nombreCompleto;
+      opt.textContent = e.nombreCompleto;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    diag(`No se pudo cargar la lista de empleados: ${err.message}`);
+  }
+}
+
+// Sesion de empleado (JWT), separada de la sesion JWT del panel admin.
 function getToken() {
   return localStorage.getItem("empleado_token");
 }
@@ -113,7 +142,7 @@ function escapeHtml(str) {
 // de forma autoritativa en cada POST /asistencia/marcar, sin importar lo
 // que decida este chequeo local.
 const PRECISION_ACEPTABLE_M = 50;
-const VENTANA_BUSQUEDA_GPS_MS = 12000;
+const VENTANA_BUSQUEDA_GPS_MS = 30000;
 
 /**
  * Obtiene la mejor lectura de GPS posible dentro de una ventana de tiempo,
@@ -207,7 +236,7 @@ function obtenerUbicacion({ onLectura } = {}) {
 
 // Activa la camara, toma una sola foto (640x480) y libera la camara de
 // inmediato. Se usa para verificar que quien marca es quien dice ser,
-// ya que compartir email/password no alcanza para "presentarse" con foto.
+// ya que compartir codigo/PIN no alcanza para "presentarse" con foto.
 async function capturarFoto() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error("Tu navegador no soporta camara.");
@@ -352,9 +381,25 @@ document.getElementById("formLogin").addEventListener("submit", async (e) => {
   btn.textContent = "Ingresando...";
 
   try {
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value;
-    const data = await apiRequest("/auth/login", { method: "POST", body: { email, password } });
+    const nombreSeleccionado = document.getElementById("selectorEmpleado").value;
+    const codigoEscrito = document.getElementById("codigoEmpleado").value.trim();
+
+    if (!nombreSeleccionado) {
+      throw { data: { error: "Selecciona tu nombre de la lista." } };
+    }
+
+    // Verificacion debil a proposito (ver comentario en marcaje.html): el
+    // codigo no es secreto, esto solo evita errores de tipeo/seleccion
+    // antes de llamar al backend, que es quien de verdad decide si el
+    // codigo existe y esta activo.
+    if (empleadosPorNombre.get(nombreSeleccionado) !== codigoEscrito) {
+      throw { data: { error: "El codigo no coincide con el nombre seleccionado." } };
+    }
+
+    const data = await apiRequest("/auth/login-empleado", {
+      method: "POST",
+      body: { codigoEmpleado: codigoEscrito },
+    });
     setSesion(data.token, data.empleado);
     mostrarBloqueMarcaje();
   } catch (err) {
@@ -405,7 +450,7 @@ async function marcar(tipo) {
 
   try {
     resultado.innerHTML =
-      "Obteniendo tu ubicación...<br><small>Buscando una señal GPS más precisa. Esto puede tardar unos segundos.</small>";
+      "Obteniendo tu ubicación...<br><small>Buscando una señal GPS más precisa. Puede tardar hasta 30 segundos.</small>";
     resultado.className = "alert mt-3 alert-info";
     resultado.classList.remove("d-none");
 
@@ -431,7 +476,8 @@ async function marcar(tipo) {
     if (coords.accuracy > PRECISION_ACEPTABLE_M) {
       diag(`[Marcaje] RECHAZADO localmente por precision: ${coords.accuracy.toFixed(1)} m > ${PRECISION_ACEPTABLE_M} m`);
       resultado.textContent =
-        "No pudimos obtener una ubicación GPS suficientemente precisa. Permanece unos segundos en el lugar y vuelve a intentarlo. Si estás usando una laptop sin GPS dedicado, prueba desde tu celular.";
+        `La mejor precisión GPS reportada fue ±${Math.round(coords.accuracy)} m; se requieren ${PRECISION_ACEPTABLE_M} m o menos. ` +
+        "Activa la ubicación precisa del celular, prueba al aire libre y vuelve a intentar. Una laptop normalmente no tiene GPS dedicado.";
       resultado.className = "alert mt-3 alert-danger";
       resultado.classList.remove("d-none");
       botones.forEach((b) => (b.disabled = false));
@@ -612,6 +658,10 @@ async function cargarHistorial() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escapeHtml(err.data?.error || err.message)}</td></tr>`;
   }
 }
+
+// Se carga siempre (no solo si falta sesion): si mas tarde cierra sesion
+// desde la pantalla de marcaje, el <select> del login ya debe estar listo.
+cargarSelectorEmpleados();
 
 // Si ya hay una sesion guardada de una visita anterior, saltar directo al marcaje.
 if (getToken() && getEmpleado()) {

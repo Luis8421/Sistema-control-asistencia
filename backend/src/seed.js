@@ -4,6 +4,10 @@ const { v4: uuidv4 } = require("uuid");
 const db = require("./db/connection");
 const { validarGeocerca } = require("./utils/geo");
 
+if (db.isPostgres) {
+  throw new Error("El seed solo puede ejecutarse sobre SQLite local; nunca sobre la base de produccion.");
+}
+
 const MAX_GPS_PRECISION_M = Number(process.env.MAX_GPS_PRECISION_M || 50);
 
 async function main() {

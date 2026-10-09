@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const path = require("path");
+const db = require("./db/connection");
 
 const authRoutes = require("./routes/auth");
 const asistenciaRoutes = require("./routes/asistencia");
@@ -49,7 +50,15 @@ app.use(express.json({ limit: "2mb" }));
 // (backend/uploads/fotos/*.jpg) para que el panel admin pueda mostrarlas.
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
-app.get("/health", (req, res) => res.json({ ok: true }));
+app.get("/health", async (req, res) => {
+  try {
+    await db.health();
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Health check de base de datos fallido:", error.message);
+    return res.status(503).json({ ok: false, error: "Base de datos no disponible" });
+  }
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/asistencia", asistenciaRoutes);
@@ -62,10 +71,25 @@ app.use("/api/indicadores", indicadoresRoutes);
 // Manejo de errores centralizado
 app.use((err, req, res, next) => {
   console.error(err);
+  if (err.code === "23505" || err.code === "SQLITE_CONSTRAINT_UNIQUE") {
+    return res.status(409).json({ error: "El registro entra en conflicto con un dato unico existente" });
+  }
+  if (err.code === "23503" || err.code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
+    return res.status(409).json({ error: "No se puede completar la operacion por registros relacionados" });
+  }
   res.status(500).json({ error: "Error interno del servidor" });
 });
 
 const PORT = process.env.PORT || 4000;
+if (
+  process.env.NODE_ENV === "production" &&
+  (!process.env.DATABASE_URL ||
+    !process.env.JWT_SECRET ||
+    process.env.JWT_SECRET === "TU_JWT_SECRET" ||
+    process.env.JWT_SECRET.length < 32)
+) {
+  throw new Error("Produccion requiere DATABASE_URL y un JWT_SECRET aleatorio de al menos 32 caracteres.");
+}
 app.listen(PORT, () => {
   console.log(`Servidor de asistencia corriendo en http://localhost:${PORT}`);
 });

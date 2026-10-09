@@ -12,7 +12,7 @@ import {
 import { login } from "../api/client";
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState("");
+  const [codigoEmpleado, setCodigoEmpleado] = useState("");
   const [password, setPassword] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState(null);
@@ -21,7 +21,7 @@ export default function LoginScreen({ navigation }) {
     setError(null);
     setCargando(true);
     try {
-      const empleado = await login(email.trim(), password);
+      const empleado = await login(codigoEmpleado.trim(), password);
       navigation.replace("Marcaje", { empleado });
     } catch (e) {
       setError(e.data?.error || "No se pudo iniciar sesion");
@@ -36,19 +36,18 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <Text style={styles.titulo}>Control de Asistencia</Text>
-      <Text style={styles.subtitulo}>Ingresa con tu cuenta de empleado</Text>
+      <Text style={styles.subtitulo}>Ingresa con tu codigo de empleado</Text>
 
       <TextInput
         style={styles.input}
-        placeholder="Correo electronico"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
+        placeholder="Codigo de empleado"
+        autoCapitalize="characters"
+        value={codigoEmpleado}
+        onChangeText={setCodigoEmpleado}
       />
       <TextInput
         style={styles.input}
-        placeholder="Contraseña"
+        placeholder="PIN / Contraseña"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -62,10 +61,6 @@ export default function LoginScreen({ navigation }) {
         ) : (
           <Text style={styles.botonTexto}>Iniciar sesion</Text>
         )}
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.linkRegistro} onPress={() => navigation.navigate("Registro")}>
-        <Text style={styles.linkRegistroTexto}>No tengo cuenta, registrarme</Text>
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );
@@ -92,6 +87,4 @@ const styles = StyleSheet.create({
   },
   botonTexto: { color: "#fff", fontWeight: "600", fontSize: 16 },
   error: { color: "#c0392b", marginBottom: 10, textAlign: "center" },
-  linkRegistro: { marginTop: 20, alignItems: "center" },
-  linkRegistroTexto: { color: "#2E86AB", fontSize: 14 },
 });
